@@ -4,23 +4,12 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::Decoder;
 
-pub struct MessageDecoder {
-    startup_decoded: bool,
-}
-
-impl MessageDecoder {
-    pub fn new() -> MessageDecoder {
-        MessageDecoder {
-            startup_decoded: false,
-        }
-    }
-}
-
 const MAX_ALLOWED_MESSAGE_LENGTH: usize = 8 * 1024 * 1024;
 
 #[derive(Debug)]
 pub enum Message {
     First(FirstMessage),
+    Subsequent(SubsequentMessage),
 }
 
 /// FirstMessage is the first message sent by a client to the server.
@@ -41,19 +30,20 @@ const SSL_REQUEST_TYPE: i32 = 80877103;
 const GSS_ENC_REQUEST_TYPE: i32 = 80877104;
 
 impl FirstMessage {
-    fn parse(src: &mut BytesMut) -> Result<Option<FirstMessage>, std::io::Error> {
-        if src.len() < 4 {
+    fn parse(buf: &mut BytesMut) -> Result<Option<FirstMessage>, std::io::Error> {
+        if buf.len() < 4 {
             // Not enough data to read message length
             return Ok(None);
         }
 
         // First four bytes contain the length of the message.
-        let length = BigEndian::read_i32(&src[..4]) as usize;
+        let length = BigEndian::read_i32(&buf[..4]) as usize;
 
+        // Length includes its own four bytes as well so it shouldn't be less than 4
         if length < 4 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid length {}. It can't be less than 4", length),
+                format!("Invalid length {length}. It can't be less than 4"),
             ));
         }
 
@@ -62,38 +52,38 @@ impl FirstMessage {
         if length > MAX_ALLOWED_MESSAGE_LENGTH {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Frame of length {} is too large.", length),
+                format!("Message of length {length} is too large."),
             ));
         }
 
-        if src.len() < length {
+        if buf.len() < length {
             // The full message has not yet arrived.
             // We reserve more space in the buffer. This is not strictly
             // necessary, but is a good idea performance-wise.
-            src.reserve(length - src.len());
+            buf.reserve(length - buf.len());
 
             // We inform the Framed that we need more bytes to form the next
             // frame.
             return Ok(None);
         }
 
-        let typ = BigEndian::read_i32(&src[4..8]);
+        let typ = BigEndian::read_i32(&buf[4..8]);
         let res = match typ {
-            CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(length, src)? {
+            CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(length, buf)? {
                 Some(body) => Ok(Some(FirstMessage::CancelRequest(body))),
                 None => Ok(None),
             },
             SSL_REQUEST_TYPE => Ok(Some(FirstMessage::SslRequest)),
             GSS_ENC_REQUEST_TYPE => Ok(Some(FirstMessage::GssEncRequest)),
-            _ => match StartupMessageBody::parse(length, typ, src)? {
+            _ => match StartupMessageBody::parse(length, typ, buf)? {
                 Some(body) => Ok(Some(FirstMessage::StartupMessage(body))),
                 None => Ok(None),
             },
         };
 
-        // Use advance to modify src such that it no longer contains
+        // Use advance to modify buf such that it no longer contains
         // this message.
-        src.advance(length);
+        buf.advance(length);
         res
     }
 }
@@ -108,12 +98,12 @@ impl StartupMessageBody {
     fn parse(
         length: usize,
         protocol_version: i32,
-        src: &mut BytesMut,
+        buf: &[u8],
     ) -> Result<Option<StartupMessageBody>, std::io::Error> {
         let mut param_start = 8;
         let mut parameters = Vec::new();
         loop {
-            match CStr::from_bytes_until_nul(&src[param_start..]) {
+            match CStr::from_bytes_until_nul(&buf[param_start..]) {
                 Ok(param) => {
                     param_start += param.to_bytes().len() + 1;
                     match param.to_str() {
@@ -129,7 +119,7 @@ impl StartupMessageBody {
                         }
                     }
                     if param_start >= length - 1 {
-                        if src[length - 1] != 0 {
+                        if buf[length - 1] != 0 {
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 "Invalid startup message: not null terminated",
@@ -162,43 +152,305 @@ pub struct CancelRequestBody {
 impl CancelRequestBody {
     fn parse(
         length: usize,
-        src: &mut BytesMut,
+        buf: &mut BytesMut,
     ) -> Result<Option<CancelRequestBody>, std::io::Error> {
         if length != 16 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid length {}. It should be 16", length),
+                format!("Invalid length {length}. It should be 16"),
             ));
         }
-        if src.len() < 16 {
-            src.reserve(length - src.len());
+        if buf.len() < 16 {
+            buf.reserve(length - buf.len());
             return Ok(None);
         }
         Ok(Some(CancelRequestBody {
-            process_id: BigEndian::read_i32(&src[8..12]),
-            secret_key: BigEndian::read_i32(&src[12..16]),
+            process_id: BigEndian::read_i32(&buf[8..12]),
+            secret_key: BigEndian::read_i32(&buf[12..16]),
         }))
     }
 }
 
-impl Decoder for MessageDecoder {
+pub struct Header {
+    pub tag: u8,
+    pub length: i32,
+}
+
+impl Header {
+    fn parse(buf: &[u8]) -> Result<Option<Header>, std::io::Error> {
+        if buf.len() < 5 {
+            return Ok(None);
+        }
+
+        // First byte contains the tag
+        let tag = buf[0];
+
+        // Bytes 1 to 4 contain the length of the message.
+        let length = BigEndian::read_i32(&buf[1..5]) as usize;
+
+        // Length includes its own four bytes as well so it shouldn't be less than 5
+        if length < 4 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid length {length}. It can't be less than 4"),
+            ));
+        }
+
+        // Check that the length is not too large to avoid a denial of
+        // service attack where the proxy runs out of memory.
+        if length > MAX_ALLOWED_MESSAGE_LENGTH {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Message of length {length} is too large."),
+            ));
+        }
+
+        Ok(Some(Header {
+            tag,
+            length: length as i32,
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub enum SubsequentMessage {
+    Authentication(AuthenticationRequest),
+}
+
+const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
+
+impl SubsequentMessage {
+    fn parse(buf: &mut BytesMut) -> Result<Option<SubsequentMessage>, std::io::Error> {
+        match Header::parse(buf)? {
+            Some(header) => {
+                let res = match header.tag {
+                    AUTHENTICATION_MESSAGE_TAG => {
+                        match AuthenticationRequest::parse(header.length as usize, &buf[5..])? {
+                            Some(auth_req) => Ok(Some(SubsequentMessage::Authentication(auth_req))),
+                            None => Ok(None),
+                        }
+                    }
+                    tag => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid header tag {tag}"),
+                        ));
+                    }
+                };
+                buf.advance(header.length as usize);
+                res
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AuthenticationRequest {
+    AuthenticationOk,
+    AuthenticationKerberosV5,
+    AuthenticationCleartextPassword,
+    AuthenticationMd5Password,
+    AuthenticationGss,
+    AuthenticationGssContinue,
+    AuthenticationSspi,
+    AuthenticationSasl,
+    AuthenticationSaslContinue,
+    AuthenticationSaslFinal,
+}
+
+const AUTHETICATION_OK_TYPE: i32 = 0;
+const AUTHETICATION_KERBEROS_TYPE: i32 = 2;
+const AUTHETICATION_CLEARTEXT_PWD_TYPE: i32 = 3;
+const AUTHETICATION_MD5_PWD_TYPE: i32 = 5;
+const AUTHETICATION_GSS_TYPE: i32 = 7;
+const AUTHETICATION_GSS_CONTINUE_TYPE: i32 = 8;
+const AUTHETICATION_SSPI_TYPE: i32 = 9;
+const AUTHETICATION_SASL_TYPE: i32 = 10;
+const AUTHETICATION_SASL_CONTINUE_TYPE: i32 = 11;
+const AUTHETICATION_SASL_FINAL_TYPE: i32 = 12;
+
+impl AuthenticationRequest {
+    fn parse(length: usize, buf: &[u8]) -> Result<Option<AuthenticationRequest>, std::io::Error> {
+        if buf.len() < 4 {
+            return Ok(None);
+        }
+
+        let typ = BigEndian::read_i32(buf);
+
+        match typ {
+            AUTHETICATION_OK_TYPE => {
+                if length != 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationOk message. It should be 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationOk))
+                }
+            }
+            AUTHETICATION_KERBEROS_TYPE => {
+                if length != 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationKererosV5 message. It should be 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationKerberosV5))
+                }
+            }
+            AUTHETICATION_CLEARTEXT_PWD_TYPE => {
+                if length != 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationCleartextPassword message. It should be 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationCleartextPassword))
+                }
+            }
+            AUTHETICATION_MD5_PWD_TYPE => {
+                if length != 12 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationMd5Password message. It should be 12"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationMd5Password))
+                }
+            }
+            AUTHETICATION_GSS_TYPE => {
+                if length != 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationGss message. It should be 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationGss))
+                }
+            }
+            AUTHETICATION_GSS_CONTINUE_TYPE => {
+                if length <= 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationGssContinue message. It should be greater than 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationGssContinue))
+                }
+            }
+            AUTHETICATION_SSPI_TYPE => {
+                if length != 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationSspi message. It should be 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationSspi))
+                }
+            }
+            AUTHETICATION_SASL_TYPE => {
+                if length <= 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationSasl message. It should be greater than 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationSasl))
+                }
+            }
+            AUTHETICATION_SASL_CONTINUE_TYPE => {
+                if length <= 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationSaslContinue message. It should be greater than 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationSaslContinue))
+                }
+            }
+            AUTHETICATION_SASL_FINAL_TYPE => {
+                if length <= 8 {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid length {length} for AuthenticationSaslFinal message. It should be greater than 8"
+                        ),
+                    ))
+                } else {
+                    Ok(Some(AuthenticationRequest::AuthenticationSaslFinal))
+                }
+            }
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid length {length} for AuthenticationOk message. It should be 6"),
+            )),
+        }
+    }
+}
+
+pub struct ClientMessageDecoder {
+    startup_decoded: bool,
+}
+
+impl ClientMessageDecoder {
+    pub fn new() -> ClientMessageDecoder {
+        ClientMessageDecoder {
+            startup_decoded: false,
+        }
+    }
+}
+
+impl Decoder for ClientMessageDecoder {
     type Item = Message;
     type Error = std::io::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if self.startup_decoded {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Unimplemented",
-            ));
+            match SubsequentMessage::parse(buf)? {
+                Some(msg) => Ok(Some(Message::Subsequent(msg))),
+                None => Ok(None),
+            }
         } else {
-            match FirstMessage::parse(src)? {
+            match FirstMessage::parse(buf)? {
                 Some(msg) => {
                     self.startup_decoded = true;
                     Ok(Some(Message::First(msg)))
                 }
                 None => Ok(None),
             }
+        }
+    }
+}
+
+pub struct UpstreamMessageDecoder;
+
+impl Decoder for UpstreamMessageDecoder {
+    type Item = Message;
+    type Error = std::io::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        match SubsequentMessage::parse(buf)? {
+            Some(msg) => Ok(Some(Message::Subsequent(msg))),
+            None => Ok(None),
         }
     }
 }

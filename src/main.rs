@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use decoder::MessageDecoder;
+use decoder::{ClientMessageDecoder, UpstreamMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -15,7 +15,7 @@ trait Session {
 
 struct ClientToUpstreamSession {
     buf: BytesMut,
-    decoder: MessageDecoder,
+    decoder: ClientMessageDecoder,
     total_bytes_copied: u64,
 }
 
@@ -43,6 +43,8 @@ impl Session for ClientToUpstreamSession {
 }
 
 struct UpstreamToClientSession {
+    buf: BytesMut,
+    decoder: UpstreamMessageDecoder,
     total_bytes_copied: u64,
 }
 
@@ -50,6 +52,14 @@ impl Session for UpstreamToClientSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
         eprintln!("Copied {} bytes from upstream to client", bytes.len());
+
+        self.buf.extend_from_slice(bytes);
+        let message = self.decoder.decode(&mut self.buf);
+        match message {
+            Ok(Some(msg)) => eprintln!("Decoded msg: {msg:?}"),
+            Ok(None) => eprintln!("not enough data to decode message"),
+            Err(e) => eprintln!("error decoding message: {e:?}"),
+        }
     }
 
     fn connection_closed(&self) {
@@ -88,10 +98,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut client_to_upstream_session = ClientToUpstreamSession {
                 buf: BytesMut::new(),
-                decoder: MessageDecoder::new(),
+                decoder: ClientMessageDecoder::new(),
                 total_bytes_copied: 0,
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
+                buf: BytesMut::new(),
+                decoder: UpstreamMessageDecoder,
                 total_bytes_copied: 0,
             };
 
