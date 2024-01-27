@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use decoder::{ClientMessageDecoder, UpstreamMessageDecoder};
+use decoder::{ClientMessageDecoder, ServerMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -44,7 +44,7 @@ impl Session for ClientToUpstreamSession {
 
 struct UpstreamToClientSession {
     buf: BytesMut,
-    decoder: UpstreamMessageDecoder,
+    decoder: ServerMessageDecoder,
     total_bytes_copied: u64,
 }
 
@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
                 buf: BytesMut::new(),
-                decoder: UpstreamMessageDecoder,
+                decoder: ServerMessageDecoder,
                 total_bytes_copied: 0,
             };
 
