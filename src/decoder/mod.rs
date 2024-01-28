@@ -1,7 +1,10 @@
 pub mod client;
 pub mod server;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    ffi::CStr,
+    sync::{Arc, Mutex},
+};
 
 use byteorder::{BigEndian, ByteOrder};
 
@@ -66,6 +69,39 @@ impl UnknownMessageBody {
             header,
             bytes: buf[..data_length].to_vec(),
         }))
+    }
+}
+
+enum ReadCStrResult {
+    NotNullTerminated,
+    NotUtf8Formatted,
+}
+
+impl From<ReadCStrResult> for std::io::Error {
+    fn from(value: ReadCStrResult) -> Self {
+        match value {
+            ReadCStrResult::NotNullTerminated => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("c string is not null terminated"),
+            ),
+            ReadCStrResult::NotUtf8Formatted => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("c string is utf8 formatted"),
+            ),
+        }
+    }
+}
+
+fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrResult> {
+    match buf.iter().position(|b| *b == b'\0') {
+        Some(null_pos) => {
+            let cstr = unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..(null_pos + 1)]) };
+            match cstr.to_str() {
+                Ok(str) => Ok((str.to_string(), null_pos + 1)),
+                Err(_) => Err(ReadCStrResult::NotUtf8Formatted),
+            }
+        }
+        None => Err(ReadCStrResult::NotNullTerminated),
     }
 }
 

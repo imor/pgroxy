@@ -8,10 +8,12 @@ use tokio_util::codec::Decoder;
 pub enum ServerMessage {
     Authentication(AuthenticationRequest),
     Ssl(SslResponse),
+    ParameterStatus(ParameterStatusBody),
     Unknown(super::UnknownMessageBody),
 }
 
 const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
+const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
 
 impl ServerMessage {
     fn parse(
@@ -33,6 +35,10 @@ impl ServerMessage {
                                 None => Ok(None),
                             }
                         }
+                        PARAM_STATUS_MESSAGE_TAG => match ParameterStatusBody::parse(&buf[5..])? {
+                            Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
+                            None => Ok(None),
+                        },
                         _ => match super::UnknownMessageBody::parse(&buf[5..], header)? {
                             Some(body) => Ok(Some(ServerMessage::Unknown(body))),
                             None => Ok(None),
@@ -233,6 +239,24 @@ impl SslResponse {
         // println!("Advancing over 1 bytes");
         buf.advance(1);
         res
+    }
+}
+
+#[derive(Debug)]
+pub struct ParameterStatusBody {
+    pub param_name: String,
+    pub param_value: String,
+}
+
+impl ParameterStatusBody {
+    fn parse(buf: &[u8]) -> Result<Option<ParameterStatusBody>, std::io::Error> {
+        let (param_name, end_pos) = super::read_cstr(buf)?;
+        let (param_value, _) = super::read_cstr(&buf[end_pos..])?;
+
+        Ok(Some(ParameterStatusBody {
+            param_name,
+            param_value,
+        }))
     }
 }
 

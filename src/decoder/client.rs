@@ -1,7 +1,4 @@
-use std::{
-    ffi::CStr,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
@@ -74,21 +71,8 @@ impl QueryBody {
             ));
         }
 
-        match CStr::from_bytes_with_nul(buf) {
-            Ok(query) => match query.to_str() {
-                Ok(query) => Ok(Some(QueryBody {
-                    query: query.to_string(),
-                })),
-                Err(e) => Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid query. Not valid utf-8: {e:?}"),
-                )),
-            },
-            Err(e) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid query. Not null terminated: {e:?}"),
-            )),
-        }
+        let (query, _) = super::read_cstr(buf)?;
+        Ok(Some(QueryBody { query }))
     }
 }
 
@@ -184,37 +168,17 @@ impl StartupMessageBody {
         let mut param_start = 8;
         let mut parameters = Vec::new();
         loop {
-            match CStr::from_bytes_until_nul(&buf[param_start..]) {
-                Ok(param) => {
-                    param_start += param.to_bytes().len() + 1;
-                    match param.to_str() {
-                        Ok(param) => {
-                            if param.is_empty() {}
-                            parameters.push(param.to_string())
-                        }
-                        Err(_) => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Invalid parameter in startup message: not valid utf-8 encoded",
-                            ));
-                        }
-                    }
-                    if param_start >= length - 1 {
-                        if buf[length - 1] != 0 {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Invalid startup message: not null terminated",
-                            ));
-                        }
-                        break;
-                    }
-                }
-                Err(_) => {
+            let (param, end_pos) = super::read_cstr(&buf[param_start..])?;
+            parameters.push(param);
+            param_start += end_pos;
+            if param_start >= length - 1 {
+                if buf[length - 1] != 0 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Invalid parameter in startup message: not null terminated",
+                        "Invalid startup message: not null terminated",
                     ));
                 }
+                break;
             }
         }
         Ok(Some(StartupMessageBody {
