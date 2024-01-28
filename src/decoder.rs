@@ -1,4 +1,7 @@
-use std::ffi::CStr;
+use std::{
+    ffi::CStr,
+    sync::{Arc, Mutex},
+};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
@@ -75,11 +78,6 @@ impl QueryBody {
             )),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ServerMessage {
-    Authentication(AuthenticationRequest),
 }
 
 /// FirstMessage is the first message sent by a client to the server.
@@ -282,30 +280,46 @@ impl Header {
     }
 }
 
+#[derive(Debug)]
+pub enum ServerMessage {
+    Authentication(AuthenticationRequest),
+    Ssl(SslResponse),
+}
+
 const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
 
 impl ServerMessage {
-    fn parse(buf: &mut BytesMut) -> Result<Option<ServerMessage>, std::io::Error> {
-        match Header::parse(buf)? {
-            Some(header) => {
-                let res = match header.tag {
-                    AUTHENTICATION_MESSAGE_TAG => {
-                        match AuthenticationRequest::parse(header.length as usize, &buf[5..])? {
-                            Some(auth_req) => Ok(Some(ServerMessage::Authentication(auth_req))),
-                            None => Ok(None),
-                        }
-                    }
-                    tag => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Invalid header tag {tag}"),
-                        ));
-                    }
-                };
-                buf.advance(header.length as usize + 1);
-                res
+    fn parse(
+        buf: &mut BytesMut,
+        expecting_ssl_response: bool,
+    ) -> Result<Option<ServerMessage>, std::io::Error> {
+        if expecting_ssl_response {
+            match SslResponse::parse(buf)? {
+                Some(msg) => Ok(Some(ServerMessage::Ssl(msg))),
+                None => Ok(None),
             }
-            None => Ok(None),
+        } else {
+            match Header::parse(buf)? {
+                Some(header) => {
+                    let res = match header.tag {
+                        AUTHENTICATION_MESSAGE_TAG => {
+                            match AuthenticationRequest::parse(header.length as usize, &buf[5..])? {
+                                Some(auth_req) => Ok(Some(ServerMessage::Authentication(auth_req))),
+                                None => Ok(None),
+                            }
+                        }
+                        tag => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Invalid header tag {tag}"),
+                            ));
+                        }
+                    };
+                    buf.advance(header.length as usize + 1);
+                    res
+                }
+                None => Ok(None),
+            }
         }
     }
 }
@@ -472,16 +486,56 @@ impl AuthenticationRequest {
     }
 }
 
-pub struct ClientMessageDecoder {
-    startup_decoded: bool,
+#[derive(Debug)]
+pub struct SslResponse {
+    accepted: bool,
 }
 
-impl ClientMessageDecoder {
-    pub fn new() -> ClientMessageDecoder {
-        ClientMessageDecoder {
-            startup_decoded: false,
+impl SslResponse {
+    fn parse(buf: &mut BytesMut) -> Result<Option<SslResponse>, std::io::Error> {
+        if buf.len() < 1 {
+            return Ok(None);
+        }
+
+        let byte = buf[0];
+        let res = match byte {
+            b'S' => Ok(Some(SslResponse { accepted: true })),
+            b'N' => Ok(Some(SslResponse { accepted: false })),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid SslResponse byte: {byte}"),
+            )),
+        };
+        buf.advance(1);
+        res
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ProtocolState {
+    Initial,
+    SslRequestSent,
+    SslAccepted,
+    SslRejected,
+}
+
+impl ProtocolState {
+    pub fn startup_done(&self) -> bool {
+        match self {
+            ProtocolState::Initial => false,
+            ProtocolState::SslRequestSent => false,
+            ProtocolState::SslAccepted => true,
+            ProtocolState::SslRejected => false,
         }
     }
+
+    pub fn expecting_ssl_response(&self) -> bool {
+        matches!(self, ProtocolState::SslRequestSent)
+    }
+}
+
+pub struct ClientMessageDecoder {
+    protocol_state: Arc<Mutex<ProtocolState>>,
 }
 
 impl Decoder for ClientMessageDecoder {
@@ -489,7 +543,11 @@ impl Decoder for ClientMessageDecoder {
     type Error = std::io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if self.startup_decoded {
+        let mut state = self
+            .protocol_state
+            .lock()
+            .expect("failed to lock protocol_state");
+        if state.startup_done() {
             match SubsequentMessage::parse(buf)? {
                 Some(msg) => Ok(Some(ClientMessage::Subsequent(msg))),
                 None => Ok(None),
@@ -497,7 +555,12 @@ impl Decoder for ClientMessageDecoder {
         } else {
             match FirstMessage::parse(buf)? {
                 Some(msg) => {
-                    self.startup_decoded = true;
+                    match msg {
+                        FirstMessage::SslRequest => {
+                            *state = ProtocolState::SslRequestSent;
+                        }
+                        _ => {}
+                    }
                     Ok(Some(ClientMessage::First(msg)))
                 }
                 None => Ok(None),
@@ -506,16 +569,40 @@ impl Decoder for ClientMessageDecoder {
     }
 }
 
-pub struct ServerMessageDecoder;
+pub struct ServerMessageDecoder {
+    protocol_state: Arc<Mutex<ProtocolState>>,
+}
 
 impl Decoder for ServerMessageDecoder {
     type Item = ServerMessage;
     type Error = std::io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        match ServerMessage::parse(buf)? {
-            Some(msg) => Ok(Some(msg)),
+        let mut state = self
+            .protocol_state
+            .lock()
+            .expect("failed to lock protocol_state");
+        match ServerMessage::parse(buf, state.expecting_ssl_response())? {
+            Some(msg) => {
+                if let ServerMessage::Ssl(SslResponse { accepted }) = msg {
+                    if accepted {
+                        *state = ProtocolState::SslAccepted
+                    } else {
+                        *state = ProtocolState::SslRejected
+                    }
+                }
+                Ok(Some(msg))
+            }
             None => Ok(None),
         }
     }
+}
+
+pub fn create_decoders() -> (ClientMessageDecoder, ServerMessageDecoder) {
+    let protocol_state = Arc::new(Mutex::new(ProtocolState::Initial));
+    let client_msg_decoder = ClientMessageDecoder {
+        protocol_state: Arc::clone(&protocol_state),
+    };
+    let server_msg_decoder = ServerMessageDecoder { protocol_state };
+    (client_msg_decoder, server_msg_decoder)
 }

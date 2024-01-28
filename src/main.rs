@@ -5,9 +5,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 use tokio_util::codec::Decoder;
+
+use crate::decoder::create_decoders;
 mod decoder;
 
-trait Session {
+trait HalfSession {
     fn bytes_copied(&mut self, bytes: &[u8]);
     fn connection_closed(&self);
     fn cancel_requested(&self);
@@ -19,7 +21,7 @@ struct ClientToUpstreamSession {
     total_bytes_copied: u64,
 }
 
-impl Session for ClientToUpstreamSession {
+impl HalfSession for ClientToUpstreamSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
         eprintln!("Copied {} bytes from client to upstream", bytes.len());
@@ -27,7 +29,9 @@ impl Session for ClientToUpstreamSession {
         self.buf.extend_from_slice(bytes);
         let message = self.decoder.decode(&mut self.buf);
         match message {
-            Ok(Some(msg)) => eprintln!("Decoded msg: {msg:?}"),
+            Ok(Some(msg)) => {
+                eprintln!("Decoded msg: {msg:?}")
+            }
             Ok(None) => eprintln!("not enough data to decode message"),
             Err(e) => eprintln!("error decoding message: {e:?}"),
         }
@@ -48,7 +52,7 @@ struct UpstreamToClientSession {
     total_bytes_copied: u64,
 }
 
-impl Session for UpstreamToClientSession {
+impl HalfSession for UpstreamToClientSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
         eprintln!("Copied {} bytes from upstream to client", bytes.len());
@@ -96,14 +100,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let (cancel_sender, _) = broadcast::channel::<()>(1);
 
+            let (client_msg_decoder, server_msg_decoder) = create_decoders();
+
             let mut client_to_upstream_session = ClientToUpstreamSession {
                 buf: BytesMut::new(),
-                decoder: ClientMessageDecoder::new(),
+                decoder: client_msg_decoder,
                 total_bytes_copied: 0,
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
                 buf: BytesMut::new(),
-                decoder: ServerMessageDecoder,
+                decoder: server_msg_decoder,
                 total_bytes_copied: 0,
             };
 
@@ -143,7 +149,7 @@ async fn copy_bytes<R, W, S>(
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
-    S: Session,
+    S: HalfSession,
 {
     let mut buf = [0; 1024];
     loop {
