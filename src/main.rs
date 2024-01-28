@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use decoder::{ClientMessageDecoder, ServerMessageDecoder};
+use decoder::{client::ClientMessageDecoder, ServerMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
