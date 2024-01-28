@@ -18,6 +18,7 @@ pub enum ClientMessage {
 #[derive(Debug)]
 pub enum SubsequentMessage {
     Query(QueryBody),
+    Unknown(UnknownMessageBody),
 }
 
 const QUERY_MESSAGE_TAG: u8 = b'Q';
@@ -33,13 +34,12 @@ impl SubsequentMessage {
                             None => Ok(None),
                         }
                     }
-                    tag => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Invalid header tag {tag}"),
-                        ));
-                    }
+                    _ => match UnknownMessageBody::parse(&buf[5..], header)? {
+                        Some(body) => Ok(Some(SubsequentMessage::Unknown(body))),
+                        None => Ok(None),
+                    },
                 };
+                // eprintln!("Advancing over {} bytes", header.length + 1);
                 buf.advance(header.length as usize + 1);
                 res
             }
@@ -151,6 +151,7 @@ impl FirstMessage {
 
         // Use advance to modify buf such that it no longer contains
         // this message.
+        // eprintln!("Advancing over {length} bytes");
         buf.advance(length);
         res
     }
@@ -239,6 +240,7 @@ impl CancelRequestBody {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Header {
     pub tag: u8,
     pub length: i32,
@@ -284,6 +286,7 @@ impl Header {
 pub enum ServerMessage {
     Authentication(AuthenticationRequest),
     Ssl(SslResponse),
+    Unknown(UnknownMessageBody),
 }
 
 const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
@@ -308,13 +311,12 @@ impl ServerMessage {
                                 None => Ok(None),
                             }
                         }
-                        tag => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                format!("Invalid header tag {tag}"),
-                            ));
-                        }
+                        _ => match UnknownMessageBody::parse(&buf[5..], header)? {
+                            Some(body) => Ok(Some(ServerMessage::Unknown(body))),
+                            None => Ok(None),
+                        },
                     };
+                    // eprintln!("Advancing over {} bytes", header.length + 1);
                     buf.advance(header.length as usize + 1);
                     res
                 }
@@ -506,8 +508,29 @@ impl SslResponse {
                 format!("Invalid SslResponse byte: {byte}"),
             )),
         };
+        // eprintln!("Advancing over 1 bytes");
         buf.advance(1);
         res
+    }
+}
+
+#[derive(Debug)]
+pub struct UnknownMessageBody {
+    pub header: Header,
+    pub bytes: Vec<u8>,
+}
+
+impl UnknownMessageBody {
+    fn parse(buf: &[u8], header: Header) -> Result<Option<UnknownMessageBody>, std::io::Error> {
+        let data_length = header.length as usize - 4;
+        if buf.len() < data_length {
+            return Ok(None);
+        }
+
+        Ok(Some(UnknownMessageBody {
+            header,
+            bytes: buf[..data_length].to_vec(),
+        }))
     }
 }
 
@@ -517,6 +540,7 @@ enum ProtocolState {
     SslRequestSent,
     SslAccepted,
     SslRejected,
+    AuthenticationOk,
 }
 
 impl ProtocolState {
@@ -526,6 +550,7 @@ impl ProtocolState {
             ProtocolState::SslRequestSent => false,
             ProtocolState::SslAccepted => true,
             ProtocolState::SslRejected => false,
+            ProtocolState::AuthenticationOk => true,
         }
     }
 
@@ -584,12 +609,18 @@ impl Decoder for ServerMessageDecoder {
             .expect("failed to lock protocol_state");
         match ServerMessage::parse(buf, state.expecting_ssl_response())? {
             Some(msg) => {
-                if let ServerMessage::Ssl(SslResponse { accepted }) = msg {
-                    if accepted {
-                        *state = ProtocolState::SslAccepted
-                    } else {
-                        *state = ProtocolState::SslRejected
+                match msg {
+                    ServerMessage::Authentication(AuthenticationRequest::AuthenticationOk) => {
+                        *state = ProtocolState::AuthenticationOk
                     }
+                    ServerMessage::Ssl(SslResponse { accepted }) => {
+                        if accepted {
+                            *state = ProtocolState::SslAccepted
+                        } else {
+                            *state = ProtocolState::SslRejected
+                        }
+                    }
+                    _ => {}
                 }
                 Ok(Some(msg))
             }

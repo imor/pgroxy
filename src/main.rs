@@ -24,15 +24,17 @@ struct ClientToUpstreamSession {
 impl HalfSession for ClientToUpstreamSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
-
         self.buf.extend_from_slice(bytes);
+        // eprintln!("→ BYTES: {:?}", &self.buf[..]);
+
         let message = self.decoder.decode(&mut self.buf);
+
         match message {
             Ok(Some(msg)) => {
                 eprintln!("→ {msg:?}")
             }
             Ok(None) => eprintln!("not enough data to decode message"),
-            Err(e) => eprintln!("error decoding message: {e:?}"),
+            Err(e) => eprintln!("→ error decoding message: {e:?}"),
         }
     }
 
@@ -54,13 +56,15 @@ struct UpstreamToClientSession {
 impl HalfSession for UpstreamToClientSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
-
         self.buf.extend_from_slice(bytes);
+        // eprintln!("← BYTES: {:?}", &self.buf[..]);
+
         let message = self.decoder.decode(&mut self.buf);
+
         match message {
             Ok(Some(msg)) => eprintln!("← {msg:?}"),
             Ok(None) => eprintln!("not enough data to decode message"),
-            Err(e) => eprintln!("error decoding message: {e:?}"),
+            Err(e) => eprintln!("← error decoding message: {e:?}"),
         }
     }
 
