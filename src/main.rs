@@ -24,13 +24,12 @@ struct ClientToUpstreamSession {
 impl HalfSession for ClientToUpstreamSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
-        eprintln!("Copied {} bytes from client to upstream", bytes.len());
 
         self.buf.extend_from_slice(bytes);
         let message = self.decoder.decode(&mut self.buf);
         match message {
             Ok(Some(msg)) => {
-                eprintln!("Decoded msg: {msg:?}")
+                eprintln!("→ {msg:?}")
             }
             Ok(None) => eprintln!("not enough data to decode message"),
             Err(e) => eprintln!("error decoding message: {e:?}"),
@@ -55,12 +54,11 @@ struct UpstreamToClientSession {
 impl HalfSession for UpstreamToClientSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
-        eprintln!("Copied {} bytes from upstream to client", bytes.len());
 
         self.buf.extend_from_slice(bytes);
         let message = self.decoder.decode(&mut self.buf);
         match message {
-            Ok(Some(msg)) => eprintln!("Decoded msg: {msg:?}"),
+            Ok(Some(msg)) => eprintln!("← {msg:?}"),
             Ok(None) => eprintln!("not enough data to decode message"),
             Err(e) => eprintln!("error decoding message: {e:?}"),
         }
@@ -123,11 +121,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             eprintln!(
-                "Copied total {} bytes from client to upstream in this session",
+                "→ copied total {} bytes in this session",
                 client_to_upstream_session.total_bytes_copied
             );
             eprintln!(
-                "Copied total {} bytes from upstream to client in this session",
+                "← copied total {} bytes in this session",
                 upstream_to_client_session.total_bytes_copied
             );
             if let Err(e) = client_res {
