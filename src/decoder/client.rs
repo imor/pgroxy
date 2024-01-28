@@ -51,7 +51,7 @@ impl SubsequentMessage {
                         None => Ok(None),
                     },
                 };
-                // eprintln!("Advancing over {} bytes", header.length + 1);
+                // println!("Advancing over {} bytes", header.length + 1);
                 buf.advance(header.length as usize + 1);
                 res
             }
@@ -163,7 +163,7 @@ impl FirstMessage {
 
         // Use advance to modify buf such that it no longer contains
         // this message.
-        // eprintln!("Advancing over {length} bytes");
+        // println!("Advancing over {length} bytes");
         buf.advance(length);
         res
     }

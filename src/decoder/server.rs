@@ -38,7 +38,7 @@ impl ServerMessage {
                             None => Ok(None),
                         },
                     };
-                    // eprintln!("Advancing over {} bytes", header.length + 1);
+                    // println!("Advancing over {} bytes", header.length + 1);
                     buf.advance(header.length as usize + 1);
                     res
                 }
@@ -230,7 +230,7 @@ impl SslResponse {
                 format!("Invalid SslResponse byte: {byte}"),
             )),
         };
-        // eprintln!("Advancing over 1 bytes");
+        // println!("Advancing over 1 bytes");
         buf.advance(1);
         res
     }

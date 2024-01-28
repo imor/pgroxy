@@ -26,25 +26,25 @@ impl HalfSession for ClientToUpstreamSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
         self.buf.extend_from_slice(bytes);
-        // eprintln!("→ BYTES: {:?}", &self.buf[..]);
+        // println!("→ BYTES: {:?}", &self.buf[..]);
 
         let message = self.decoder.decode(&mut self.buf);
 
         match message {
             Ok(Some(msg)) => {
-                eprintln!("→ {msg:?}")
+                println!("→ {msg:?}")
             }
-            Ok(None) => eprintln!("not enough data to decode message"),
+            Ok(None) => {}
             Err(e) => eprintln!("→ error decoding message: {e:?}"),
         }
     }
 
     fn connection_closed(&self) {
-        eprintln!("Client closed the connection");
+        println!("Client closed the connection");
     }
 
     fn cancel_requested(&self) {
-        eprintln!("Closing connection from client");
+        println!("Closing connection from client");
     }
 }
 
@@ -58,23 +58,23 @@ impl HalfSession for UpstreamToClientSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
         self.total_bytes_copied += bytes.len() as u64;
         self.buf.extend_from_slice(bytes);
-        // eprintln!("← BYTES: {:?}", &self.buf[..]);
+        // println!("← BYTES: {:?}", &self.buf[..]);
 
         let message = self.decoder.decode(&mut self.buf);
 
         match message {
-            Ok(Some(msg)) => eprintln!("← {msg:?}"),
-            Ok(None) => eprintln!("not enough data to decode message"),
+            Ok(Some(msg)) => println!("← {msg:?}"),
+            Ok(None) => {}
             Err(e) => eprintln!("← error decoding message: {e:?}"),
         }
     }
 
     fn connection_closed(&self) {
-        eprintln!("Upstream closed the connection");
+        println!("Upstream closed the connection");
     }
 
     fn cancel_requested(&self) {
-        eprintln!("Closing connection to upstream");
+        println!("Closing connection to upstream");
     }
 }
 
@@ -125,11 +125,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .then(|r| { let _ = cancel_sender.send(()); async { r } }),
             };
 
-            eprintln!(
+            println!(
                 "→ copied total {} bytes in this session",
                 client_to_upstream_session.total_bytes_copied
             );
-            eprintln!(
+            println!(
                 "← copied total {} bytes in this session",
                 upstream_to_client_session.total_bytes_copied
             );
