@@ -16,19 +16,19 @@ pub struct Header {
     pub length: i32,
 }
 
-enum ParseHeaderError {
+enum HeaderParseError {
     LengthTooShort(usize, usize),
     LengthTooLong(usize, usize),
 }
 
-impl From<ParseHeaderError> for std::io::Error {
-    fn from(value: ParseHeaderError) -> Self {
+impl From<HeaderParseError> for std::io::Error {
+    fn from(value: HeaderParseError) -> Self {
         match value {
-            ParseHeaderError::LengthTooShort(length, limit) => std::io::Error::new(
+            HeaderParseError::LengthTooShort(length, limit) => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid header length {length}. It can't be less than {limit}"),
             ),
-            ParseHeaderError::LengthTooLong(length, limit) => std::io::Error::new(
+            HeaderParseError::LengthTooLong(length, limit) => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid header length {length}. It can't be greater than  {limit}"),
             ),
@@ -37,7 +37,7 @@ impl From<ParseHeaderError> for std::io::Error {
 }
 
 impl Header {
-    fn parse(buf: &[u8]) -> Result<Option<Header>, ParseHeaderError> {
+    fn parse(buf: &[u8]) -> Result<Option<Header>, HeaderParseError> {
         if buf.len() < 5 {
             return Ok(None);
         }
@@ -50,13 +50,13 @@ impl Header {
 
         // Length includes its own four bytes as well so it shouldn't be less than 5
         if length < 4 {
-            return Err(ParseHeaderError::LengthTooShort(length, 4));
+            return Err(HeaderParseError::LengthTooShort(length, 4));
         }
 
         // Check that the length is not too large to avoid a denial of
         // service attack where the proxy runs out of memory.
         if length > MAX_ALLOWED_MESSAGE_LENGTH {
-            return Err(ParseHeaderError::LengthTooLong(
+            return Err(HeaderParseError::LengthTooLong(
                 length,
                 MAX_ALLOWED_MESSAGE_LENGTH,
             ));

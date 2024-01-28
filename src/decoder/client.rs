@@ -4,7 +4,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::Decoder;
 
-use super::{ParseHeaderError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
+use super::{HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -228,7 +228,7 @@ pub enum SubsequentMessage {
 
 enum ParseSubsequenceMessageError {
     InvalidTerminateLength(usize, usize),
-    Header(ParseHeaderError),
+    Header(HeaderParseError),
     QueryBody(QueryBodyParseError),
 }
 
@@ -249,8 +249,8 @@ impl From<ParseSubsequenceMessageError> for std::io::Error {
     }
 }
 
-impl From<ParseHeaderError> for ParseSubsequenceMessageError {
-    fn from(value: ParseHeaderError) -> Self {
+impl From<HeaderParseError> for ParseSubsequenceMessageError {
+    fn from(value: HeaderParseError) -> Self {
         ParseSubsequenceMessageError::Header(value)
     }
 }
