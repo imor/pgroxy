@@ -39,7 +39,7 @@ impl ServerMessage {
                             Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
                             None => Ok(None),
                         },
-                        _ => match super::UnknownMessageBody::parse(&buf[5..], header)? {
+                        _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
                             Some(body) => Ok(Some(ServerMessage::Unknown(body))),
                             None => Ok(None),
                         },

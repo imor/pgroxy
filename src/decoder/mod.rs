@@ -16,8 +16,28 @@ pub struct Header {
     pub length: i32,
 }
 
+enum ParseHeaderError {
+    LengthTooShort(usize, usize),
+    LengthTooLong(usize, usize),
+}
+
+impl From<ParseHeaderError> for std::io::Error {
+    fn from(value: ParseHeaderError) -> Self {
+        match value {
+            ParseHeaderError::LengthTooShort(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid header length {length}. It can't be less than {limit}"),
+            ),
+            ParseHeaderError::LengthTooLong(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid header length {length}. It can't be greater than  {limit}"),
+            ),
+        }
+    }
+}
+
 impl Header {
-    fn parse(buf: &[u8]) -> Result<Option<Header>, std::io::Error> {
+    fn parse(buf: &[u8]) -> Result<Option<Header>, ParseHeaderError> {
         if buf.len() < 5 {
             return Ok(None);
         }
@@ -30,18 +50,15 @@ impl Header {
 
         // Length includes its own four bytes as well so it shouldn't be less than 5
         if length < 4 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid length {length}. It can't be less than 4"),
-            ));
+            return Err(ParseHeaderError::LengthTooShort(length, 4));
         }
 
         // Check that the length is not too large to avoid a denial of
         // service attack where the proxy runs out of memory.
         if length > MAX_ALLOWED_MESSAGE_LENGTH {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Message of length {length} is too large."),
+            return Err(ParseHeaderError::LengthTooLong(
+                length,
+                MAX_ALLOWED_MESSAGE_LENGTH,
             ));
         }
 
@@ -59,32 +76,32 @@ pub struct UnknownMessageBody {
 }
 
 impl UnknownMessageBody {
-    fn parse(buf: &[u8], header: Header) -> Result<Option<UnknownMessageBody>, std::io::Error> {
+    fn parse(buf: &[u8], header: Header) -> Option<UnknownMessageBody> {
         let data_length = header.length as usize - 4;
         if buf.len() < data_length {
-            return Ok(None);
+            return None;
         }
 
-        Ok(Some(UnknownMessageBody {
+        Some(UnknownMessageBody {
             header,
             bytes: buf[..data_length].to_vec(),
-        }))
+        })
     }
 }
 
-enum ReadCStrResult {
+enum ReadCStrError {
     NotNullTerminated,
     NotUtf8Formatted,
 }
 
-impl From<ReadCStrResult> for std::io::Error {
-    fn from(value: ReadCStrResult) -> Self {
+impl From<ReadCStrError> for std::io::Error {
+    fn from(value: ReadCStrError) -> Self {
         match value {
-            ReadCStrResult::NotNullTerminated => std::io::Error::new(
+            ReadCStrError::NotNullTerminated => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("c string is not null terminated"),
             ),
-            ReadCStrResult::NotUtf8Formatted => std::io::Error::new(
+            ReadCStrError::NotUtf8Formatted => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("c string is utf8 formatted"),
             ),
@@ -92,16 +109,16 @@ impl From<ReadCStrResult> for std::io::Error {
     }
 }
 
-fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrResult> {
+fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrError> {
     match buf.iter().position(|b| *b == b'\0') {
         Some(null_pos) => {
             let cstr = unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..(null_pos + 1)]) };
             match cstr.to_str() {
                 Ok(str) => Ok((str.to_string(), null_pos + 1)),
-                Err(_) => Err(ReadCStrResult::NotUtf8Formatted),
+                Err(_) => Err(ReadCStrError::NotUtf8Formatted),
             }
         }
-        None => Err(ReadCStrResult::NotNullTerminated),
+        None => Err(ReadCStrError::NotNullTerminated),
     }
 }
 
