@@ -1,5 +1,7 @@
+mod decoder;
+
 use bytes::BytesMut;
-use decoder::{client::ClientMessageDecoder, ServerMessageDecoder};
+use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -7,7 +9,6 @@ use tokio::sync::broadcast;
 use tokio_util::codec::Decoder;
 
 use crate::decoder::create_decoders;
-mod decoder;
 
 trait HalfSession {
     fn bytes_copied(&mut self, bytes: &[u8]);
