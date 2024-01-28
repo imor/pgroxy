@@ -17,9 +17,11 @@ pub enum ClientMessage {
 pub enum SubsequentMessage {
     Query(QueryBody),
     Unknown(super::UnknownMessageBody),
+    Terminate,
 }
 
 const QUERY_MESSAGE_TAG: u8 = b'Q';
+const TERMINATE_MESSAGE_TAG: u8 = b'X';
 
 impl SubsequentMessage {
     fn parse(buf: &mut BytesMut) -> Result<Option<SubsequentMessage>, std::io::Error> {
@@ -31,6 +33,18 @@ impl SubsequentMessage {
                             Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
                             None => Ok(None),
                         }
+                    }
+                    TERMINATE_MESSAGE_TAG => {
+                        if header.length != 4 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!(
+                                    "Invalid length {} for Terminate message. It should be 4",
+                                    header.length
+                                ),
+                            ));
+                        }
+                        Ok(Some(SubsequentMessage::Terminate))
                     }
                     _ => match super::UnknownMessageBody::parse(&buf[5..], header)? {
                         Some(body) => Ok(Some(SubsequentMessage::Unknown(body))),
