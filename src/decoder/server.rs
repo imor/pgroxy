@@ -13,6 +13,7 @@ pub enum ServerMessage {
     ParameterStatus(ParameterStatusBody),
     BackendKeyData(BackendKeyDataBody),
     ReadyForQuery(ReadyForQueryBody),
+    RowDescription(RowDescriptionBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -23,6 +24,7 @@ enum ServerMessageParseError {
     Authentication(AuthenticationRequestParseError),
     ParamStatus(ParameterStatusBodyParseError),
     BackendKeyData(BackendKeyDataBodyParseError),
+    RowDescription(RowDescriptionBodyParseError),
     Error(ErrorResponseBodyParseError),
     ReadyForQuery(ReadyForQueryBodyParseError),
 }
@@ -63,6 +65,12 @@ impl From<ReadyForQueryBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<RowDescriptionBodyParseError> for ServerMessageParseError {
+    fn from(value: RowDescriptionBodyParseError) -> Self {
+        ServerMessageParseError::RowDescription(value)
+    }
+}
+
 impl From<ErrorResponseBodyParseError> for ServerMessageParseError {
     fn from(value: ErrorResponseBodyParseError) -> Self {
         ServerMessageParseError::Error(value)
@@ -78,6 +86,7 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::ParamStatus(e) => e.into(),
             ServerMessageParseError::BackendKeyData(e) => e.into(),
             ServerMessageParseError::ReadyForQuery(e) => e.into(),
+            ServerMessageParseError::RowDescription(e) => e.into(),
             ServerMessageParseError::Error(e) => e.into(),
         }
     }
@@ -87,6 +96,7 @@ const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
 const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
 const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
 const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
+const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
@@ -130,6 +140,14 @@ impl ServerMessage {
                         READY_FOR_QUERY_MESSAGE_TAG => {
                             match ReadyForQueryBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::ReadyForQuery(body))),
+                                None => {
+                                    return Ok(None);
+                                }
+                            }
+                        }
+                        ROW_DESCRIPTION_MESSAGE_TAG => {
+                            match RowDescriptionBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::RowDescription(body))),
                                 None => {
                                     return Ok(None);
                                 }
@@ -483,6 +501,131 @@ impl ReadyForQueryBody {
             }))
         };
         res
+    }
+}
+
+#[derive(Debug)]
+pub struct RowDescriptionField {
+    pub name: String,
+    pub oid: i32,
+    pub attnum: i16,
+    pub typoid: i32,
+    pub typlen: i16,
+    pub typmod: i32,
+    pub format: i16,
+}
+
+enum RowDescriptionFieldParseError {
+    InvalidName(ReadCStrError),
+}
+
+impl From<ReadCStrError> for RowDescriptionFieldParseError {
+    fn from(value: ReadCStrError) -> Self {
+        RowDescriptionFieldParseError::InvalidName(value)
+    }
+}
+
+impl RowDescriptionField {
+    fn parse(
+        buf: &[u8],
+    ) -> Result<Option<(RowDescriptionField, usize)>, RowDescriptionFieldParseError> {
+        let (name, end_pos) = read_cstr(buf)?;
+        let buf = &buf[end_pos..];
+        if buf.len() < 18 {
+            return Ok(None);
+        }
+
+        let oid = BigEndian::read_i32(buf);
+        let attnum = BigEndian::read_i16(&buf[4..]);
+        let typoid = BigEndian::read_i32(&buf[6..]);
+        let typlen = BigEndian::read_i16(&buf[10..]);
+        let typmod = BigEndian::read_i32(&buf[12..]);
+        let format = BigEndian::read_i16(&buf[16..]);
+
+        Ok(Some((
+            RowDescriptionField {
+                name,
+                oid,
+                attnum,
+                typoid,
+                typlen,
+                typmod,
+                format,
+            },
+            end_pos + 18,
+        )))
+    }
+}
+
+#[derive(Debug)]
+pub struct RowDescriptionBody {
+    pub fields: Vec<RowDescriptionField>,
+}
+
+enum RowDescriptionBodyParseError {
+    LengthTooShort(usize, usize),
+    InvalidNumFields(i16),
+    InvalidField(RowDescriptionFieldParseError),
+}
+
+impl From<RowDescriptionBodyParseError> for std::io::Error {
+    fn from(value: RowDescriptionBodyParseError) -> Self {
+        match value {
+            RowDescriptionBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid RowDescription message length {length}. It should be at least {limit}"
+                ),
+            ),
+            RowDescriptionBodyParseError::InvalidNumFields(num_fields) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid number of fields {num_fields} in RowDescription message"),
+            ),
+            RowDescriptionBodyParseError::InvalidField(_) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid field in RowDescription message"),
+            ),
+        }
+    }
+}
+
+impl From<RowDescriptionFieldParseError> for RowDescriptionBodyParseError {
+    fn from(value: RowDescriptionFieldParseError) -> Self {
+        RowDescriptionBodyParseError::InvalidField(value)
+    }
+}
+
+impl RowDescriptionBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<RowDescriptionBody>, RowDescriptionBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if length < 6 {
+            buf.advance(length + 1);
+            return Err(RowDescriptionBodyParseError::LengthTooShort(length, 6));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        let num_fields = BigEndian::read_i16(body_buf);
+        if num_fields < 0 {
+            buf.advance(length + 1);
+            return Err(RowDescriptionBodyParseError::InvalidNumFields(num_fields));
+        }
+        body_buf = &body_buf[2..];
+        let mut fields = Vec::with_capacity(num_fields as usize);
+        for _ in 0..num_fields {
+            let (field, end_pos) = match RowDescriptionField::parse(body_buf)? {
+                Some(res) => res,
+                None => {
+                    return Ok(None);
+                }
+            };
+            fields.push(field);
+            body_buf = &body_buf[end_pos..];
+        }
+        Ok(Some(RowDescriptionBody { fields }))
     }
 }
 
