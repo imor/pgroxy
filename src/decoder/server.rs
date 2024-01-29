@@ -106,36 +106,48 @@ impl ServerMessage {
                         AUTHENTICATION_MESSAGE_TAG => {
                             match AuthenticationRequest::parse(header.length as usize, buf)? {
                                 Some(auth_req) => Ok(Some(ServerMessage::Authentication(auth_req))),
-                                None => Ok(None),
+                                None => {
+                                    return Ok(None);
+                                }
                             }
                         }
                         PARAM_STATUS_MESSAGE_TAG => {
                             match ParameterStatusBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
-                                None => Ok(None),
+                                None => {
+                                    return Ok(None);
+                                }
                             }
                         }
                         BACKEND_KEY_DATA_MESSAGE_TAG => {
                             match BackendKeyDataBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(ServerMessage::BackendKeyData(body))),
-                                None => Ok(None),
+                                None => {
+                                    return Ok(None);
+                                }
                             }
                         }
                         READY_FOR_QUERY_MESSAGE_TAG => {
                             match ReadyForQueryBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::ReadyForQuery(body))),
-                                None => Ok(None),
+                                None => {
+                                    return Ok(None);
+                                }
                             }
                         }
                         ERROR_RESPONSE_MESSAGE_TAG => {
                             match ErrorResponseBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::Error(body))),
-                                None => Ok(None),
+                                None => {
+                                    return Ok(None);
+                                }
                             }
                         }
                         _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
                             Some(body) => Ok(Some(ServerMessage::Unknown(body))),
-                            None => Ok(None),
+                            None => {
+                                return Ok(None);
+                            }
                         },
                     };
                     buf.advance(header.length as usize + 1);
