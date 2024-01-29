@@ -28,14 +28,18 @@ impl HalfSession for ClientToUpstreamSession {
         self.buf.extend_from_slice(bytes);
         // println!("→ BYTES: {:?}", &self.buf[..]);
 
-        let message = self.decoder.decode(&mut self.buf);
+        loop {
+            let message = self.decoder.decode(&mut self.buf);
 
-        match message {
-            Ok(Some(msg)) => {
-                println!("→ {msg:?}")
+            match message {
+                Ok(Some(msg)) => {
+                    println!("→ {msg:?}")
+                }
+                Ok(None) => {
+                    break;
+                }
+                Err(e) => eprintln!("→ error decoding message: {e:?}"),
             }
-            Ok(None) => {}
-            Err(e) => eprintln!("→ error decoding message: {e:?}"),
         }
     }
 
@@ -60,12 +64,16 @@ impl HalfSession for UpstreamToClientSession {
         self.buf.extend_from_slice(bytes);
         // println!("← BYTES: {:?}", &self.buf[..]);
 
-        let message = self.decoder.decode(&mut self.buf);
+        loop {
+            let message = self.decoder.decode(&mut self.buf);
 
-        match message {
-            Ok(Some(msg)) => println!("← {msg:?}"),
-            Ok(None) => {}
-            Err(e) => eprintln!("← error decoding message: {e:?}"),
+            match message {
+                Ok(Some(msg)) => println!("← {msg:?}"),
+                Ok(None) => {
+                    break;
+                }
+                Err(e) => eprintln!("← error decoding message: {e:?}"),
+            }
         }
     }
 
