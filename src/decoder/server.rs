@@ -15,6 +15,7 @@ pub enum ServerMessage {
     ReadyForQuery(ReadyForQueryBody),
     RowDescription(RowDescriptionBody),
     CommandCompelte(CommandCompleteBody),
+    DataRow(DataRowBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -27,6 +28,7 @@ enum ServerMessageParseError {
     BackendKeyData(BackendKeyDataBodyParseError),
     RowDescription(RowDescriptionBodyParseError),
     CommandComplete(CommandCompleteBodyParseError),
+    DataRow(DataRowBodyParseError),
     Error(ErrorResponseBodyParseError),
     ReadyForQuery(ReadyForQueryBodyParseError),
 }
@@ -79,6 +81,12 @@ impl From<CommandCompleteBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<DataRowBodyParseError> for ServerMessageParseError {
+    fn from(value: DataRowBodyParseError) -> Self {
+        ServerMessageParseError::DataRow(value)
+    }
+}
+
 impl From<ErrorResponseBodyParseError> for ServerMessageParseError {
     fn from(value: ErrorResponseBodyParseError) -> Self {
         ServerMessageParseError::Error(value)
@@ -96,6 +104,7 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::ReadyForQuery(e) => e.into(),
             ServerMessageParseError::RowDescription(e) => e.into(),
             ServerMessageParseError::CommandComplete(e) => e.into(),
+            ServerMessageParseError::DataRow(e) => e.into(),
             ServerMessageParseError::Error(e) => e.into(),
         }
     }
@@ -107,6 +116,7 @@ const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
 const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
+const DATA_ROW_MESSAGE_TAG: u8 = b'D';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
@@ -166,6 +176,12 @@ impl ServerMessage {
                         COMMAND_COMPLETE_MESSAGE_TAG => {
                             match CommandCompleteBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::CommandCompelte(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                        DATA_ROW_MESSAGE_TAG => {
+                            match DataRowBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::DataRow(body))),
                                 None => return Ok(None),
                             }
                         }
@@ -545,6 +561,7 @@ impl RowDescriptionField {
     fn parse(
         buf: &[u8],
     ) -> Result<Option<(RowDescriptionField, usize)>, RowDescriptionFieldParseError> {
+        //TODO: advance before early return due to error
         let (name, end_pos) = read_cstr(buf)?;
         let buf = &buf[end_pos..];
         if buf.len() < 18 {
@@ -634,9 +651,7 @@ impl RowDescriptionBody {
         for _ in 0..num_fields {
             let (field, end_pos) = match RowDescriptionField::parse(body_buf)? {
                 Some(res) => res,
-                None => {
-                    return Ok(None);
-                }
+                None => return Ok(None),
             };
             fields.push(field);
             body_buf = &body_buf[end_pos..];
@@ -690,6 +705,107 @@ impl CommandCompleteBody {
         }
         let (command_tag, _) = read_cstr(body_buf)?;
         Ok(Some(CommandCompleteBody { command_tag }))
+    }
+}
+
+#[derive(Debug)]
+pub struct DataRowColumn {
+    pub value: Vec<u8>,
+}
+
+struct DataRowColumnParseError(i32);
+
+impl DataRowColumn {
+    fn parse(buf: &[u8]) -> Result<Option<(DataRowColumn, usize)>, DataRowColumnParseError> {
+        if buf.len() < 4 {
+            return Ok(None);
+        }
+        let len = BigEndian::read_i32(buf);
+        // len is -1 when column is null
+        if len == -1 {
+            return Ok(Some((DataRowColumn { value: Vec::new() }, 4)));
+        }
+        if len < 0 {
+            //TODO: advance before early return due to error
+            return Err(DataRowColumnParseError(len));
+        }
+        if buf.len() < len as usize + 4 {
+            return Ok(None);
+        }
+        let buf = &buf[4..];
+        let value = buf[..len as usize].to_vec();
+        let len = len as usize + 4;
+        Ok(Some((DataRowColumn { value }, len)))
+    }
+}
+
+#[derive(Debug)]
+pub struct DataRowBody {
+    pub columns: Vec<DataRowColumn>,
+}
+
+enum DataRowBodyParseError {
+    LengthTooShort(usize, usize),
+    InvalidNumCols(i16),
+    InvalidColumnLength(DataRowColumnParseError),
+}
+
+impl From<DataRowBodyParseError> for std::io::Error {
+    fn from(value: DataRowBodyParseError) -> Self {
+        match value {
+            DataRowBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid DataRow message length {length}. It should be at least {limit}"),
+            ),
+            DataRowBodyParseError::InvalidNumCols(num_cols) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid number of columns {num_cols} in DataRow message"),
+            ),
+            DataRowBodyParseError::InvalidColumnLength(DataRowColumnParseError(length)) => {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid column length {length} in DataRow message"),
+                )
+            }
+        }
+    }
+}
+
+impl From<DataRowColumnParseError> for DataRowBodyParseError {
+    fn from(value: DataRowColumnParseError) -> Self {
+        DataRowBodyParseError::InvalidColumnLength(value)
+    }
+}
+
+impl DataRowBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<DataRowBody>, DataRowBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if length < 6 {
+            buf.advance(length + 1);
+            return Err(DataRowBodyParseError::LengthTooShort(length, 6));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        let num_cols = BigEndian::read_i16(body_buf);
+        if num_cols < 0 {
+            buf.advance(length + 1);
+            return Err(DataRowBodyParseError::InvalidNumCols(num_cols));
+        }
+        body_buf = &body_buf[2..];
+        let mut columns = Vec::with_capacity(num_cols as usize);
+        for _ in 0..num_cols {
+            let (column, end_pos) = match DataRowColumn::parse(body_buf)? {
+                Some(res) => res,
+                None => return Ok(None),
+            };
+            columns.push(column);
+            body_buf = &body_buf[end_pos..];
+        }
+        Ok(Some(DataRowBody { columns }))
     }
 }
 
