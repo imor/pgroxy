@@ -11,6 +11,7 @@ pub enum ServerMessage {
     Authentication(AuthenticationRequest),
     Ssl(SslResponse),
     ParameterStatus(ParameterStatusBody),
+    BackendKeyData(BackendKeyDataBody),
     Unknown(super::UnknownMessageBody),
 }
 
@@ -19,6 +20,7 @@ enum ServerMessageParseError {
     Ssl(SslResponseParseError),
     Authentication(AuthenticationRequestParseError),
     ParamStatus(ParameterStatusBodyParseError),
+    BackendKeyData(BackendKeyDataBodyParseError),
 }
 
 impl From<HeaderParseError> for ServerMessageParseError {
@@ -45,6 +47,12 @@ impl From<ParameterStatusBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<BackendKeyDataBodyParseError> for ServerMessageParseError {
+    fn from(value: BackendKeyDataBodyParseError) -> Self {
+        ServerMessageParseError::BackendKeyData(value)
+    }
+}
+
 impl From<ServerMessageParseError> for std::io::Error {
     fn from(value: ServerMessageParseError) -> Self {
         match value {
@@ -52,12 +60,14 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::Ssl(e) => e.into(),
             ServerMessageParseError::Authentication(e) => e.into(),
             ServerMessageParseError::ParamStatus(e) => e.into(),
+            ServerMessageParseError::BackendKeyData(e) => e.into(),
         }
     }
 }
 
 const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
 const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
+const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
 
 impl ServerMessage {
     fn parse(
@@ -82,6 +92,12 @@ impl ServerMessage {
                         PARAM_STATUS_MESSAGE_TAG => {
                             match ParameterStatusBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
+                                None => Ok(None),
+                            }
+                        }
+                        BACKEND_KEY_DATA_MESSAGE_TAG => {
+                            match BackendKeyDataBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(ServerMessage::BackendKeyData(body))),
                                 None => Ok(None),
                             }
                         }
@@ -334,6 +350,49 @@ impl ParameterStatusBody {
             param_name,
             param_value,
         }))
+    }
+}
+
+#[derive(Debug)]
+pub struct BackendKeyDataBody {
+    pub process_id: i32,
+    pub secret_key: i32,
+}
+
+enum BackendKeyDataBodyParseError {
+    InvalidLength(usize, usize),
+}
+
+impl From<BackendKeyDataBodyParseError> for std::io::Error {
+    fn from(value: BackendKeyDataBodyParseError) -> Self {
+        match value {
+            BackendKeyDataBodyParseError::InvalidLength(expected, actual) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid length {actual}. It should be {expected}"),
+            ),
+        }
+    }
+}
+
+impl BackendKeyDataBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<BackendKeyDataBody>, BackendKeyDataBodyParseError> {
+        let body_buf = &buf[5..];
+        if body_buf.len() < 8 {
+            return Ok(None);
+        }
+        let res = if length != 12 {
+            buf.advance(length + 1);
+            Err(BackendKeyDataBodyParseError::InvalidLength(12, length))
+        } else {
+            Ok(Some(BackendKeyDataBody {
+                process_id: BigEndian::read_i32(&body_buf[..4]),
+                secret_key: BigEndian::read_i32(&body_buf[4..8]),
+            }))
+        };
+        res
     }
 }
 
