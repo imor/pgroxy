@@ -14,6 +14,7 @@ pub enum ServerMessage {
     BackendKeyData(BackendKeyDataBody),
     ReadyForQuery(ReadyForQueryBody),
     RowDescription(RowDescriptionBody),
+    CommandCompelte(CommandCompleteBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -25,6 +26,7 @@ enum ServerMessageParseError {
     ParamStatus(ParameterStatusBodyParseError),
     BackendKeyData(BackendKeyDataBodyParseError),
     RowDescription(RowDescriptionBodyParseError),
+    CommandComplete(CommandCompleteBodyParseError),
     Error(ErrorResponseBodyParseError),
     ReadyForQuery(ReadyForQueryBodyParseError),
 }
@@ -71,6 +73,12 @@ impl From<RowDescriptionBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<CommandCompleteBodyParseError> for ServerMessageParseError {
+    fn from(value: CommandCompleteBodyParseError) -> Self {
+        ServerMessageParseError::CommandComplete(value)
+    }
+}
+
 impl From<ErrorResponseBodyParseError> for ServerMessageParseError {
     fn from(value: ErrorResponseBodyParseError) -> Self {
         ServerMessageParseError::Error(value)
@@ -87,6 +95,7 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::BackendKeyData(e) => e.into(),
             ServerMessageParseError::ReadyForQuery(e) => e.into(),
             ServerMessageParseError::RowDescription(e) => e.into(),
+            ServerMessageParseError::CommandComplete(e) => e.into(),
             ServerMessageParseError::Error(e) => e.into(),
         }
     }
@@ -97,6 +106,7 @@ const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
 const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
 const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
+const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
@@ -151,6 +161,12 @@ impl ServerMessage {
                                 None => {
                                     return Ok(None);
                                 }
+                            }
+                        }
+                        COMMAND_COMPLETE_MESSAGE_TAG => {
+                            match CommandCompleteBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::CommandCompelte(body))),
+                                None => return Ok(None),
                             }
                         }
                         ERROR_RESPONSE_MESSAGE_TAG => {
@@ -626,6 +642,54 @@ impl RowDescriptionBody {
             body_buf = &body_buf[end_pos..];
         }
         Ok(Some(RowDescriptionBody { fields }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CommandCompleteBody {
+    pub command_tag: String,
+}
+
+enum CommandCompleteBodyParseError {
+    LengthTooShort(usize, usize),
+    InvalidCommandTag(ReadCStrError),
+}
+
+impl From<CommandCompleteBodyParseError> for std::io::Error {
+    fn from(value: CommandCompleteBodyParseError) -> Self {
+        match value {
+            CommandCompleteBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid CommandComplete message length {length}. It should be at least {limit}"
+                ),
+            ),
+            CommandCompleteBodyParseError::InvalidCommandTag(e) => e.into(),
+        }
+    }
+}
+
+impl From<ReadCStrError> for CommandCompleteBodyParseError {
+    fn from(value: ReadCStrError) -> Self {
+        CommandCompleteBodyParseError::InvalidCommandTag(value)
+    }
+}
+
+impl CommandCompleteBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CommandCompleteBody>, CommandCompleteBodyParseError> {
+        let body_buf = &buf[5..];
+        if length < 5 {
+            buf.advance(length + 1);
+            return Err(CommandCompleteBodyParseError::LengthTooShort(length, 5));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        let (command_tag, _) = read_cstr(body_buf)?;
+        Ok(Some(CommandCompleteBody { command_tag }))
     }
 }
 
