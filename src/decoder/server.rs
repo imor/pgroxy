@@ -4,7 +4,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::Decoder;
 
-use super::{HeaderParseError, ReadCStrError};
+use super::{read_cstr, HeaderParseError, ReadCStrError};
 
 #[derive(Debug)]
 pub enum ServerMessage {
@@ -13,6 +13,7 @@ pub enum ServerMessage {
     ParameterStatus(ParameterStatusBody),
     BackendKeyData(BackendKeyDataBody),
     ReadyForQuery(ReadyForQueryBody),
+    Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
 }
 
@@ -22,6 +23,7 @@ enum ServerMessageParseError {
     Authentication(AuthenticationRequestParseError),
     ParamStatus(ParameterStatusBodyParseError),
     BackendKeyData(BackendKeyDataBodyParseError),
+    Error(ErrorResponseBodyParseError),
     ReadyForQuery(ReadyForQueryBodyParseError),
 }
 
@@ -61,6 +63,12 @@ impl From<ReadyForQueryBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<ErrorResponseBodyParseError> for ServerMessageParseError {
+    fn from(value: ErrorResponseBodyParseError) -> Self {
+        ServerMessageParseError::Error(value)
+    }
+}
+
 impl From<ServerMessageParseError> for std::io::Error {
     fn from(value: ServerMessageParseError) -> Self {
         match value {
@@ -70,6 +78,7 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::ParamStatus(e) => e.into(),
             ServerMessageParseError::BackendKeyData(e) => e.into(),
             ServerMessageParseError::ReadyForQuery(e) => e.into(),
+            ServerMessageParseError::Error(e) => e.into(),
         }
     }
 }
@@ -78,6 +87,7 @@ const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
 const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
 const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
 const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
+const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
     fn parse(
@@ -114,6 +124,12 @@ impl ServerMessage {
                         READY_FOR_QUERY_MESSAGE_TAG => {
                             match ReadyForQueryBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::ReadyForQuery(body))),
+                                None => Ok(None),
+                            }
+                        }
+                        ERROR_RESPONSE_MESSAGE_TAG => {
+                            match ErrorResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::Error(body))),
                                 None => Ok(None),
                             }
                         }
@@ -455,6 +471,92 @@ impl ReadyForQueryBody {
             }))
         };
         res
+    }
+}
+
+#[derive(Debug)]
+pub struct ErrorField {
+    pub code: u8,
+    pub value: String,
+}
+
+impl ErrorField {
+    fn parse(buf: &[u8]) -> Result<Option<(ErrorField, usize)>, ReadCStrError> {
+        if buf.len() < 2 {
+            return Ok(None);
+        }
+
+        let code = buf[0];
+        if code == 0 {
+            return Ok(Some((
+                ErrorField {
+                    code: 0,
+                    value: "".to_string(),
+                },
+                1,
+            )));
+        }
+        let (value, end_pos) = read_cstr(&buf[1..])?;
+        Ok(Some((ErrorField { code, value }, end_pos)))
+    }
+}
+
+#[derive(Debug)]
+pub struct ErrorResponseBody {
+    pub fields: Vec<ErrorField>,
+}
+
+enum ErrorResponseBodyParseError {
+    LengthTooShort(usize, usize),
+    InvalidField(ReadCStrError),
+}
+
+impl From<ErrorResponseBodyParseError> for std::io::Error {
+    fn from(value: ErrorResponseBodyParseError) -> Self {
+        match value {
+            ErrorResponseBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid length {length}. It should be greater than {limit}"),
+            ),
+            ErrorResponseBodyParseError::InvalidField(e) => e.into(),
+        }
+    }
+}
+
+impl From<ReadCStrError> for ErrorResponseBodyParseError {
+    fn from(value: ReadCStrError) -> Self {
+        ErrorResponseBodyParseError::InvalidField(value)
+    }
+}
+
+impl ErrorResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<ErrorResponseBody>, ErrorResponseBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+
+        if length < 5 {
+            buf.advance(length + 1);
+            return Err(ErrorResponseBodyParseError::LengthTooShort(length, 5));
+        }
+
+        let mut fields = Vec::new();
+        loop {
+            let (field, end_pos) = match ErrorField::parse(&body_buf)? {
+                Some(res) => res,
+                None => return Ok(None),
+            };
+            if field.code == 0 {
+                break;
+            }
+            fields.push(field);
+            body_buf = &body_buf[end_pos..];
+        }
+        Ok(Some(ErrorResponseBody { fields }))
     }
 }
 
