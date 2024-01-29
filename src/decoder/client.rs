@@ -160,6 +160,9 @@ impl StartupMessageBody {
         protocol_version: i32,
         buf: &mut BytesMut,
     ) -> Result<Option<StartupMessageBody>, ParseStartupMessageBodyError> {
+        if buf.len() < length {
+            return Ok(None);
+        }
         let mut param_start = 8;
         let mut parameters = Vec::new();
         loop {
@@ -338,6 +341,9 @@ impl From<ReadCStrError> for QueryBodyParseError {
 impl QueryBody {
     fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<QueryBody>, QueryBodyParseError> {
         let body_buf = &buf[5..];
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
         if length <= 4 {
             buf.advance(length + 1);
             return Err(QueryBodyParseError::LengthTooShort(length, 4));

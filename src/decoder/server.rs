@@ -173,7 +173,7 @@ impl AuthenticationRequest {
         buf: &mut BytesMut,
     ) -> Result<Option<AuthenticationRequest>, AuthenticationRequestParseError> {
         let body_buf = &buf[5..];
-        if body_buf.len() < 4 {
+        if body_buf.len() < length - 4 {
             return Ok(None);
         }
 
@@ -331,6 +331,9 @@ impl ParameterStatusBody {
         buf: &mut BytesMut,
     ) -> Result<Option<ParameterStatusBody>, ParameterStatusBodyParseError> {
         let body_buf = &buf[5..];
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
         let (param_name, end_pos) = match super::read_cstr(body_buf) {
             Ok(res) => res,
             Err(e) => {
@@ -380,7 +383,7 @@ impl BackendKeyDataBody {
         buf: &mut BytesMut,
     ) -> Result<Option<BackendKeyDataBody>, BackendKeyDataBodyParseError> {
         let body_buf = &buf[5..];
-        if body_buf.len() < 8 {
+        if body_buf.len() < length - 4 {
             return Ok(None);
         }
         let res = if length != 12 {
