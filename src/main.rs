@@ -1,5 +1,7 @@
 mod decoder;
 
+use std::sync::atomic::AtomicU8;
+
 use bytes::BytesMut;
 use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
 use futures::FutureExt;
@@ -20,6 +22,7 @@ struct ClientToUpstreamSession {
     buf: BytesMut,
     decoder: ClientMessageDecoder,
     total_bytes_copied: u64,
+    session_id: u8,
 }
 
 impl HalfSession for ClientToUpstreamSession {
@@ -38,17 +41,17 @@ impl HalfSession for ClientToUpstreamSession {
                 Ok(None) => {
                     break;
                 }
-                Err(e) => eprintln!("→ error decoding message: {e:?}"),
+                Err(e) => eprintln!("→ [{}] error decoding message: {e:?}", self.session_id),
             }
         }
     }
 
     fn connection_closed(&self) {
-        println!("Client closed the connection");
+        println!("[{}] Client closed the connection", self.session_id);
     }
 
     fn cancel_requested(&self) {
-        println!("Closing connection from client");
+        println!("[{}] Closing connection from client", self.session_id);
     }
 }
 
@@ -56,6 +59,7 @@ struct UpstreamToClientSession {
     buf: BytesMut,
     decoder: ServerMessageDecoder,
     total_bytes_copied: u64,
+    session_id: u8,
 }
 
 impl HalfSession for UpstreamToClientSession {
@@ -68,21 +72,21 @@ impl HalfSession for UpstreamToClientSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => println!("← {msg:?}"),
+                Ok(Some(msg)) => println!("← [{}] {msg:?}", self.session_id),
                 Ok(None) => {
                     break;
                 }
-                Err(e) => eprintln!("← error decoding message: {e:?}"),
+                Err(e) => eprintln!("← [{}] error decoding message: {e:?}", self.session_id),
             }
         }
     }
 
     fn connection_closed(&self) {
-        println!("Upstream closed the connection");
+        println!("[{}] Upstream closed the connection", self.session_id);
     }
 
     fn cancel_requested(&self) {
-        println!("Closing connection to upstream");
+        println!("[{}] Closing connection to upstream", self.session_id);
     }
 }
 
@@ -91,17 +95,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr).await?;
     println!("Listening on {addr}");
+    let last_session_id = AtomicU8::new(0);
 
     loop {
         let (mut client, client_addr) = listener.accept().await?;
-        println!("Received a client connection from {client_addr}");
+        let session_id = last_session_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        println!("[{session_id}] Received a client connection from {client_addr}");
 
         tokio::spawn(async move {
             let upstream_addr = "127.0.0.1:5431";
             let mut upstream = match TcpStream::connect(upstream_addr).await {
                 Ok(upstream) => upstream,
                 Err(e) => {
-                    eprintln!("failed to connect to upstream; err = {e:?}");
+                    eprintln!("[{session_id}] failed to connect to upstream; err = {e:?}");
                     return;
                 }
             };
@@ -117,11 +123,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 buf: BytesMut::new(),
                 decoder: client_msg_decoder,
                 total_bytes_copied: 0,
+                session_id,
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
                 buf: BytesMut::new(),
                 decoder: server_msg_decoder,
                 total_bytes_copied: 0,
+                session_id,
             };
 
             let (client_res, upstream_res) = tokio::join! {
@@ -134,18 +142,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             println!(
-                "→ copied total {} bytes in this session",
+                "→ [{session_id}] copied total {} bytes in this session",
                 client_to_upstream_session.total_bytes_copied
             );
             println!(
-                "← copied total {} bytes in this session",
+                "← [{session_id}] copied total {} bytes in this session",
                 upstream_to_client_session.total_bytes_copied
             );
             if let Err(e) = client_res {
-                eprintln!("Error while copying bytes from client to upstream; err = {e:?}");
+                eprintln!(
+                    "[{session_id}] Error while copying bytes from client to upstream; err = {e:?}"
+                );
             }
             if let Err(e) = upstream_res {
-                eprintln!("Error while copying bytes from upstream to client; err = {e:?}");
+                eprintln!(
+                    "[{session_id}] Error while copying bytes from upstream to client; err = {e:?}"
+                );
             }
         });
     }
