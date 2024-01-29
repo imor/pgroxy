@@ -12,6 +12,7 @@ pub enum ServerMessage {
     Ssl(SslResponse),
     ParameterStatus(ParameterStatusBody),
     BackendKeyData(BackendKeyDataBody),
+    ReadyForQuery(ReadyForQueryBody),
     Unknown(super::UnknownMessageBody),
 }
 
@@ -21,6 +22,7 @@ enum ServerMessageParseError {
     Authentication(AuthenticationRequestParseError),
     ParamStatus(ParameterStatusBodyParseError),
     BackendKeyData(BackendKeyDataBodyParseError),
+    ReadyForQuery(ReadyForQueryBodyParseError),
 }
 
 impl From<HeaderParseError> for ServerMessageParseError {
@@ -53,6 +55,12 @@ impl From<BackendKeyDataBodyParseError> for ServerMessageParseError {
     }
 }
 
+impl From<ReadyForQueryBodyParseError> for ServerMessageParseError {
+    fn from(value: ReadyForQueryBodyParseError) -> Self {
+        ServerMessageParseError::ReadyForQuery(value)
+    }
+}
+
 impl From<ServerMessageParseError> for std::io::Error {
     fn from(value: ServerMessageParseError) -> Self {
         match value {
@@ -61,6 +69,7 @@ impl From<ServerMessageParseError> for std::io::Error {
             ServerMessageParseError::Authentication(e) => e.into(),
             ServerMessageParseError::ParamStatus(e) => e.into(),
             ServerMessageParseError::BackendKeyData(e) => e.into(),
+            ServerMessageParseError::ReadyForQuery(e) => e.into(),
         }
     }
 }
@@ -68,6 +77,7 @@ impl From<ServerMessageParseError> for std::io::Error {
 const AUTHENTICATION_MESSAGE_TAG: u8 = b'R';
 const PARAM_STATUS_MESSAGE_TAG: u8 = b'S';
 const BACKEND_KEY_DATA_MESSAGE_TAG: u8 = b'K';
+const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 
 impl ServerMessage {
     fn parse(
@@ -98,6 +108,12 @@ impl ServerMessage {
                         BACKEND_KEY_DATA_MESSAGE_TAG => {
                             match BackendKeyDataBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(ServerMessage::BackendKeyData(body))),
+                                None => Ok(None),
+                            }
+                        }
+                        READY_FOR_QUERY_MESSAGE_TAG => {
+                            match ReadyForQueryBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::ReadyForQuery(body))),
                                 None => Ok(None),
                             }
                         }
@@ -371,7 +387,9 @@ impl From<BackendKeyDataBodyParseError> for std::io::Error {
         match value {
             BackendKeyDataBodyParseError::InvalidLength(expected, actual) => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid length {actual}. It should be {expected}"),
+                format!(
+                    "Invalid BackendKeyDataBody message length {actual}. It should be {expected}"
+                ),
             ),
         }
     }
@@ -393,6 +411,47 @@ impl BackendKeyDataBody {
             Ok(Some(BackendKeyDataBody {
                 process_id: BigEndian::read_i32(&body_buf[..4]),
                 secret_key: BigEndian::read_i32(&body_buf[4..8]),
+            }))
+        };
+        res
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadyForQueryBody {
+    pub transaction_status: u8,
+}
+
+enum ReadyForQueryBodyParseError {
+    InvalidLength(usize, usize),
+}
+
+impl From<ReadyForQueryBodyParseError> for std::io::Error {
+    fn from(value: ReadyForQueryBodyParseError) -> Self {
+        match value {
+            ReadyForQueryBodyParseError::InvalidLength(expected, actual) => std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid ReadyForQuery message length {actual}. It should be {expected}"),
+            ),
+        }
+    }
+}
+
+impl ReadyForQueryBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<ReadyForQueryBody>, ReadyForQueryBodyParseError> {
+        let body_buf = &buf[5..];
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        let res = if length != 5 {
+            buf.advance(length + 1);
+            Err(ReadyForQueryBodyParseError::InvalidLength(5, length))
+        } else {
+            Ok(Some(ReadyForQueryBody {
+                transaction_status: body_buf[0],
             }))
         };
         res
