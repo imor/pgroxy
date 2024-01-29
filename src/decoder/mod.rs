@@ -7,6 +7,7 @@ use std::{
 };
 
 use byteorder::{BigEndian, ByteOrder};
+use bytes::{Buf, BytesMut};
 
 const MAX_ALLOWED_MESSAGE_LENGTH: usize = 8 * 1024 * 1024;
 
@@ -37,7 +38,7 @@ impl From<HeaderParseError> for std::io::Error {
 }
 
 impl Header {
-    fn parse(buf: &[u8]) -> Result<Option<Header>, HeaderParseError> {
+    fn parse(buf: &mut BytesMut) -> Result<Option<Header>, HeaderParseError> {
         if buf.len() < 5 {
             return Ok(None);
         }
@@ -50,12 +51,14 @@ impl Header {
 
         // Length includes its own four bytes as well so it shouldn't be less than 5
         if length < 4 {
+            buf.advance(length + 1);
             return Err(HeaderParseError::LengthTooShort(length, 4));
         }
 
         // Check that the length is not too large to avoid a denial of
         // service attack where the proxy runs out of memory.
         if length > MAX_ALLOWED_MESSAGE_LENGTH {
+            buf.advance(length + 1);
             return Err(HeaderParseError::LengthTooLong(
                 length,
                 MAX_ALLOWED_MESSAGE_LENGTH,

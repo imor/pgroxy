@@ -74,21 +74,22 @@ impl ServerMessage {
                 Some(header) => {
                     let res = match header.tag {
                         AUTHENTICATION_MESSAGE_TAG => {
-                            match AuthenticationRequest::parse(header.length as usize, &buf[5..])? {
+                            match AuthenticationRequest::parse(header.length as usize, buf)? {
                                 Some(auth_req) => Ok(Some(ServerMessage::Authentication(auth_req))),
                                 None => Ok(None),
                             }
                         }
-                        PARAM_STATUS_MESSAGE_TAG => match ParameterStatusBody::parse(&buf[5..])? {
-                            Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
-                            None => Ok(None),
-                        },
+                        PARAM_STATUS_MESSAGE_TAG => {
+                            match ParameterStatusBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
+                                None => Ok(None),
+                            }
+                        }
                         _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
                             Some(body) => Ok(Some(ServerMessage::Unknown(body))),
                             None => Ok(None),
                         },
                     };
-                    // println!("Advancing over {} bytes", header.length + 1);
                     buf.advance(header.length as usize + 1);
                     res
                 }
@@ -153,17 +154,19 @@ const AUTHETICATION_SASL_FINAL_TYPE: i32 = 12;
 impl AuthenticationRequest {
     fn parse(
         length: usize,
-        buf: &[u8],
+        buf: &mut BytesMut,
     ) -> Result<Option<AuthenticationRequest>, AuthenticationRequestParseError> {
-        if buf.len() < 4 {
+        let body_buf = &buf[5..];
+        if body_buf.len() < 4 {
             return Ok(None);
         }
 
-        let typ = BigEndian::read_i32(buf);
+        let typ = BigEndian::read_i32(body_buf);
 
         match typ {
             AUTHETICATION_OK_TYPE => {
                 if length != 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(8, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationOk))
@@ -171,6 +174,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_KERBEROS_TYPE => {
                 if length != 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(8, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationKerberosV5))
@@ -178,6 +182,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_CLEARTEXT_PWD_TYPE => {
                 if length != 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(8, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationCleartextPassword))
@@ -185,6 +190,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_MD5_PWD_TYPE => {
                 if length != 12 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(12, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationMd5Password))
@@ -192,6 +198,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_GSS_TYPE => {
                 if length != 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(8, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationGss))
@@ -199,6 +206,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_GSS_CONTINUE_TYPE => {
                 if length <= 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationGssContinue))
@@ -206,6 +214,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_SSPI_TYPE => {
                 if length != 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(8, length))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationSspi))
@@ -213,6 +222,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_SASL_TYPE => {
                 if length <= 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationSasl))
@@ -220,6 +230,7 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_SASL_CONTINUE_TYPE => {
                 if length <= 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationSaslContinue))
@@ -227,12 +238,16 @@ impl AuthenticationRequest {
             }
             AUTHETICATION_SASL_FINAL_TYPE => {
                 if length <= 8 {
+                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationSaslFinal))
                 }
             }
-            typ => Err(AuthenticationRequestParseError::InvalidType(typ)),
+            typ => {
+                buf.advance(length + 1);
+                Err(AuthenticationRequestParseError::InvalidType(typ))
+            }
         }
     }
 }
@@ -269,7 +284,6 @@ impl SslResponse {
             b'N' => Ok(Some(SslResponse { accepted: false })),
             tag => Err(SslResponseParseError::InvalidTag(tag)),
         };
-        // println!("Advancing over 1 bytes");
         buf.advance(1);
         res
     }
@@ -296,11 +310,25 @@ impl From<ParameterStatusBodyParseError> for std::io::Error {
 }
 
 impl ParameterStatusBody {
-    fn parse(buf: &[u8]) -> Result<Option<ParameterStatusBody>, ParameterStatusBodyParseError> {
-        let (param_name, end_pos) = super::read_cstr(buf)
-            .map_err(|e| ParameterStatusBodyParseError::InvalidParamName(e))?;
-        let (param_value, _) = super::read_cstr(&buf[end_pos..])
-            .map_err(|e| ParameterStatusBodyParseError::InvalidParamValue(e))?;
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<ParameterStatusBody>, ParameterStatusBodyParseError> {
+        let body_buf = &buf[5..];
+        let (param_name, end_pos) = match super::read_cstr(body_buf) {
+            Ok(res) => res,
+            Err(e) => {
+                buf.advance(length + 1);
+                return Err(ParameterStatusBodyParseError::InvalidParamName(e));
+            }
+        };
+        let (param_value, _) = match super::read_cstr(&body_buf[end_pos..]) {
+            Ok(res) => res,
+            Err(e) => {
+                buf.advance(length + 1);
+                return Err(ParameterStatusBodyParseError::InvalidParamValue(e));
+            }
+        };
 
         Ok(Some(ParameterStatusBody {
             param_name,

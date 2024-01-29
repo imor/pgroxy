@@ -79,12 +79,14 @@ impl FirstMessage {
 
         // Length includes its own four bytes as well so it shouldn't be less than 4
         if length < 4 {
+            buf.advance(length);
             return Err(ParseFirstMessageError::LengthTooSmall(length, 4));
         }
 
         // Check that the length is not too large to avoid a denial of
         // service attack where the proxy runs out of memory.
         if length > super::MAX_ALLOWED_MESSAGE_LENGTH {
+            buf.advance(length);
             return Err(ParseFirstMessageError::LengthTooLarge(
                 length,
                 MAX_ALLOWED_MESSAGE_LENGTH,
@@ -118,7 +120,6 @@ impl FirstMessage {
 
         // Use advance to modify buf such that it no longer contains
         // this message.
-        // println!("Advancing over {length} bytes");
         buf.advance(length);
         res
     }
@@ -157,16 +158,23 @@ impl StartupMessageBody {
     fn parse(
         length: usize,
         protocol_version: i32,
-        buf: &[u8],
+        buf: &mut BytesMut,
     ) -> Result<Option<StartupMessageBody>, ParseStartupMessageBodyError> {
         let mut param_start = 8;
         let mut parameters = Vec::new();
         loop {
-            let (param, end_pos) = super::read_cstr(&buf[param_start..])?;
+            let (param, end_pos) = match super::read_cstr(&buf[param_start..]) {
+                Ok(res) => res,
+                Err(e) => {
+                    buf.advance(length);
+                    return Err(e.into());
+                }
+            };
             parameters.push(param);
             param_start += end_pos;
             if param_start >= length - 1 {
                 if buf[length - 1] != 0 {
+                    buf.advance(length);
                     return Err(ParseStartupMessageBodyError::NotNullTerminated);
                 }
                 break;
@@ -206,6 +214,7 @@ impl CancelRequestBody {
         buf: &mut BytesMut,
     ) -> Result<Option<CancelRequestBody>, ParseCancelRequestBodyError> {
         if length != 16 {
+            buf.advance(length);
             return Err(ParseCancelRequestBodyError::InvalidLength(16, length));
         }
         if buf.len() < 16 {
@@ -271,14 +280,13 @@ impl SubsequentMessage {
         match super::Header::parse(buf)? {
             Some(header) => {
                 let res = match header.tag {
-                    QUERY_MESSAGE_TAG => {
-                        match QueryBody::parse(header.length as usize, &buf[5..])? {
-                            Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
-                            None => Ok(None),
-                        }
-                    }
+                    QUERY_MESSAGE_TAG => match QueryBody::parse(header.length as usize, buf)? {
+                        Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
+                        None => Ok(None),
+                    },
                     TERMINATE_MESSAGE_TAG => {
                         if header.length != 4 {
+                            buf.advance(header.length as usize + 1);
                             return Err(ParseSubsequenceMessageError::InvalidTerminateLength(
                                 4,
                                 header.length as usize,
@@ -291,7 +299,6 @@ impl SubsequentMessage {
                         None => Ok(None),
                     },
                 };
-                // println!("Advancing over {} bytes", header.length + 1);
                 buf.advance(header.length as usize + 1);
                 res
             }
@@ -329,12 +336,20 @@ impl From<ReadCStrError> for QueryBodyParseError {
 }
 
 impl QueryBody {
-    fn parse(length: usize, buf: &[u8]) -> Result<Option<QueryBody>, QueryBodyParseError> {
+    fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<QueryBody>, QueryBodyParseError> {
+        let body_buf = &buf[5..];
         if length <= 4 {
+            buf.advance(length + 1);
             return Err(QueryBodyParseError::LengthTooShort(length, 4));
         }
 
-        let (query, _) = super::read_cstr(buf)?;
+        let (query, _) = match super::read_cstr(body_buf) {
+            Ok(res) => res,
+            Err(e) => {
+                buf.advance(length + 1);
+                return Err(e.into());
+            }
+        };
         Ok(Some(QueryBody { query }))
     }
 }
