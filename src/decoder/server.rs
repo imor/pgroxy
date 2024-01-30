@@ -21,6 +21,8 @@ pub enum ServerMessage {
     CommandCompelte(CommandCompleteBody),
     DataRow(DataRowBody),
     CopyData(CopyDataBody),
+    CopyIn(CopyInResponseBody),
+    CopyOut(CopyOutResponseBody),
     CopyBoth(CopyBothResponseBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
@@ -38,6 +40,8 @@ impl Display for ServerMessage {
             ServerMessage::CommandCompelte(body) => write!(f, "{body}"),
             ServerMessage::DataRow(body) => write!(f, "{body}"),
             ServerMessage::CopyData(body) => write!(f, "{body}"),
+            ServerMessage::CopyIn(body) => write!(f, "{body}"),
+            ServerMessage::CopyOut(body) => write!(f, "{body}"),
             ServerMessage::CopyBoth(body) => write!(f, "{body}"),
             ServerMessage::Error(body) => write!(f, "{body}"),
             ServerMessage::Unknown(body) => write!(f, "{body}"),
@@ -74,6 +78,12 @@ enum ServerMessageParseError {
     #[error("invalid copy data message: {0}")]
     CopyData(#[from] CopyDataBodyParseError),
 
+    #[error("invalid copy in message: {0}")]
+    CopyIn(#[from] CopyInResponseBodyParseError),
+
+    #[error("invalid copy out message: {0}")]
+    CopyOut(#[from] CopyOutResponseBodyParseError),
+
     #[error("invalid copy both message: {0}")]
     CopyBoth(#[from] CopyBothResponseBodyParseError),
 
@@ -97,6 +107,8 @@ const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
 const DATA_ROW_MESSAGE_TAG: u8 = b'D';
+const COPY_IN_MESSAGE_TAG: u8 = b'G';
+const COPY_OUT_MESSAGE_TAG: u8 = b'H'; //todo: parse only in copy mode as flush message also has this tag
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 const COPY_BOTH_MESSAGE_TAG: u8 = b'W';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
@@ -160,6 +172,18 @@ impl ServerMessage {
                         COPY_DATA_MESSAGE_TAG => {
                             match CopyDataBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::CopyData(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                        COPY_IN_MESSAGE_TAG => {
+                            match CopyInResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::CopyIn(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                        COPY_OUT_MESSAGE_TAG => {
+                            match CopyOutResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::CopyOut(body))),
                                 None => return Ok(None),
                             }
                         }
@@ -787,18 +811,146 @@ impl DataRowBody {
     }
 }
 
-#[derive(Debug)]
-pub struct CopyBothResponseBody {
-    format: i8,
-    col_formats: Vec<i16>,
-}
-
 fn format_str(format: i16) -> &'static str {
     match format {
         0 => "text",
         1 => "binary",
         _ => "unknown",
     }
+}
+
+#[derive(Debug)]
+pub struct CopyInResponseBody {
+    format: i8,
+    col_formats: Vec<i16>,
+}
+
+impl Display for CopyInResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyInResponse")?;
+        writeln!(f, "  Format: {}", format_str(self.format as i16))?;
+        for col_format in &self.col_formats {
+            writeln!(f, "  Column Format: {}", format_str(*col_format))?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyInResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("invalid number of columns {0}")]
+    InvalidNumCols(i16),
+}
+
+impl CopyInResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CopyInResponseBody>, CopyInResponseBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if length < 7 {
+            buf.advance(length + 1);
+            return Err(CopyInResponseBodyParseError::LengthTooShort(length, 7));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+
+        let format = body_buf[0] as i8;
+        body_buf = &body_buf[1..];
+        let num_cols = BigEndian::read_i16(body_buf);
+
+        if num_cols < 0 {
+            return Err(CopyInResponseBodyParseError::InvalidNumCols(num_cols));
+        }
+
+        let mut col_formats = Vec::new();
+
+        for _ in 0..num_cols {
+            let format = BigEndian::read_i16(body_buf);
+            col_formats.push(format);
+            body_buf = &body_buf[2..];
+        }
+
+        Ok(Some(CopyInResponseBody {
+            format,
+            col_formats,
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CopyOutResponseBody {
+    format: i8,
+    col_formats: Vec<i16>,
+}
+
+impl Display for CopyOutResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyOutResponse")?;
+        writeln!(f, "  Format: {}", format_str(self.format as i16))?;
+        for col_format in &self.col_formats {
+            writeln!(f, "  Column Format: {}", format_str(*col_format))?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyOutResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("invalid number of columns {0}")]
+    InvalidNumCols(i16),
+}
+
+impl CopyOutResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CopyOutResponseBody>, CopyOutResponseBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if length < 7 {
+            buf.advance(length + 1);
+            return Err(CopyOutResponseBodyParseError::LengthTooShort(length, 7));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+
+        let format = body_buf[0] as i8;
+        body_buf = &body_buf[1..];
+        let num_cols = BigEndian::read_i16(body_buf);
+
+        if num_cols < 0 {
+            return Err(CopyOutResponseBodyParseError::InvalidNumCols(num_cols));
+        }
+
+        let mut col_formats = Vec::new();
+
+        for _ in 0..num_cols {
+            let format = BigEndian::read_i16(body_buf);
+            col_formats.push(format);
+            body_buf = &body_buf[2..];
+        }
+
+        Ok(Some(CopyOutResponseBody {
+            format,
+            col_formats,
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CopyBothResponseBody {
+    format: i8,
+    col_formats: Vec<i16>,
 }
 
 impl Display for CopyBothResponseBody {
