@@ -266,8 +266,8 @@ impl Display for SubsequentMessage {
             SubsequentMessage::Query(query) => write!(f, "{query}"),
             SubsequentMessage::Unknown(body) => write!(f, "{body}"),
             SubsequentMessage::Terminate => {
-                write!(f, "")?;
-                write!(f, "  Type: Terminate")
+                writeln!(f)?;
+                writeln!(f, "  Type: Terminate")
             }
         }
     }
