@@ -63,10 +63,13 @@ const GSS_ENC_REQUEST_TYPE: i32 = 80877104;
 enum ParseFirstMessageError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooSmall(usize, usize),
+
     #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooLarge(usize, usize),
+
     #[error("invalid startup message: {0}")]
     Startup(#[from] ParseStartupMessageBodyError),
+
     #[error("invalid cancel request message: {0}")]
     Cancel(#[from] ParseCancelRequestBodyError),
 }
@@ -172,6 +175,7 @@ impl Display for StartupMessageBody {
 enum ParseStartupMessageBodyError {
     #[error("invalid param: {0}")]
     InvalidParam(#[from] ReadCStrError),
+
     #[error("startup message is not null terminated")]
     NotNullTerminated,
 }
@@ -277,8 +281,10 @@ impl Display for SubsequentMessage {
 enum ParseSubsequenceMessageError {
     #[error("invalid message length {0}. It should be {1}")]
     InvalidTerminateLength(usize, usize),
+
     #[error("header parse error: {0}")]
     Header(#[from] HeaderParseError),
+
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
 }
@@ -343,6 +349,7 @@ impl Display for QueryBody {
 enum QueryBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid query: {0}")]
     InvalidQuery(#[from] ReadCStrError),
 }

@@ -20,6 +20,7 @@ pub enum ServerMessage {
     RowDescription(RowDescriptionBody),
     CommandCompelte(CommandCompleteBody),
     DataRow(DataRowBody),
+    CopyBoth(CopyBothResponseBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -35,6 +36,7 @@ impl Display for ServerMessage {
             ServerMessage::RowDescription(body) => write!(f, "{body}"),
             ServerMessage::CommandCompelte(body) => write!(f, "{body}"),
             ServerMessage::DataRow(body) => write!(f, "{body}"),
+            ServerMessage::CopyBoth(body) => write!(f, "{body}"),
             ServerMessage::Error(body) => write!(f, "{body}"),
             ServerMessage::Unknown(body) => write!(f, "{body}"),
         }
@@ -45,22 +47,34 @@ impl Display for ServerMessage {
 enum ServerMessageParseError {
     #[error("invalid header: {0}")]
     Header(#[from] HeaderParseError),
+
     #[error("invalid ssl response: {0}")]
     Ssl(#[from] SslResponseParseError),
+
     #[error("invalid authentication request message: {0}")]
     Authentication(#[from] AuthenticationRequestParseError),
+
     #[error("invalid parameter status message: {0}")]
     ParamStatus(#[from] ParameterStatusBodyParseError),
+
     #[error("invalid backend key data message: {0}")]
     BackendKeyData(#[from] BackendKeyDataBodyParseError),
+
     #[error("invalid row description body message: {0}")]
     RowDescription(#[from] RowDescriptionBodyParseError),
+
     #[error("invalid command complete message: {0}")]
     CommandComplete(#[from] CommandCompleteBodyParseError),
+
     #[error("invalid data row body message: {0}")]
     DataRow(#[from] DataRowBodyParseError),
+
+    #[error("invalid copy both message: {0}")]
+    CopyBoth(#[from] CopyBothResponseBodyParseError),
+
     #[error("invalid error response message: {0}")]
     Error(#[from] ErrorResponseBodyParseError),
+
     #[error("invalid ready for query message: {0}")]
     ReadyForQuery(#[from] ReadyForQueryBodyParseError),
 }
@@ -78,6 +92,7 @@ const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
 const DATA_ROW_MESSAGE_TAG: u8 = b'D';
+const COPY_BOTH_MESSAGE_TAG: u8 = b'W';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
@@ -133,6 +148,12 @@ impl ServerMessage {
                         DATA_ROW_MESSAGE_TAG => {
                             match DataRowBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::DataRow(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                        COPY_BOTH_MESSAGE_TAG => {
+                            match CopyBothResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::CopyBoth(body))),
                                 None => return Ok(None),
                             }
                         }
@@ -631,6 +652,7 @@ impl Display for CommandCompleteBody {
 enum CommandCompleteBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid command tag: {0}")]
     InvalidCommandTag(#[from] ReadCStrError),
 }
@@ -707,8 +729,10 @@ impl Display for DataRowBody {
 enum DataRowBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid number of columns {0}")]
     InvalidNumCols(i16),
+
     #[error("invalid column length: {0}")]
     InvalidColumnLength(#[from] DataRowColumnParseError),
 }
@@ -748,6 +772,78 @@ impl DataRowBody {
             body_buf = &body_buf[end_pos..];
         }
         Ok(Some(DataRowBody { columns }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CopyBothResponseBody {
+    format: i8,
+    col_formats: Vec<i16>,
+}
+
+fn format_str(format: i16) -> &'static str {
+    match format {
+        0 => "text",
+        1 => "binary",
+        _ => "unknown",
+    }
+}
+
+impl Display for CopyBothResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyBothResponse")?;
+        writeln!(f, "  Format: {}", format_str(self.format as i16))?;
+        for col_format in &self.col_formats {
+            writeln!(f, "  Column Format: {}", format_str(*col_format))?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyBothResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("invalid number of columns {0}")]
+    InvalidNumCols(i16),
+}
+
+impl CopyBothResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CopyBothResponseBody>, CopyBothResponseBodyParseError> {
+        let mut body_buf = &buf[5..];
+        if length < 7 {
+            buf.advance(length + 1);
+            return Err(CopyBothResponseBodyParseError::LengthTooShort(length, 7));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+
+        let format = body_buf[0] as i8;
+        body_buf = &body_buf[1..];
+        let num_cols = BigEndian::read_i16(body_buf);
+
+        if num_cols < 0 {
+            return Err(CopyBothResponseBodyParseError::InvalidNumCols(num_cols));
+        }
+
+        let mut col_formats = Vec::new();
+
+        for _ in 0..num_cols {
+            let format = BigEndian::read_i16(body_buf);
+            col_formats.push(format);
+            body_buf = &body_buf[2..];
+        }
+
+        Ok(Some(CopyBothResponseBody {
+            format,
+            col_formats,
+        }))
     }
 }
 
@@ -798,6 +894,7 @@ impl Display for ErrorResponseBody {
 enum ErrorResponseBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid field: {0}")]
     InvalidField(#[from] ReadCStrError),
 }
