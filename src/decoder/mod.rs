@@ -3,6 +3,7 @@ pub mod server;
 
 use std::{
     ffi::CStr,
+    fmt::Display,
     sync::{Arc, Mutex},
 };
 
@@ -65,6 +66,14 @@ impl Header {
 pub struct UnknownMessageBody {
     pub header: Header,
     pub bytes: Vec<u8>,
+}
+
+impl Display for UnknownMessageBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: Unknown")?;
+        writeln!(f, "  Bytes: {:?}", self.bytes)
+    }
 }
 
 impl UnknownMessageBody {

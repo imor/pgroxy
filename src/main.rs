@@ -35,9 +35,7 @@ impl HalfSession for ClientToUpstreamSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => {
-                    println!("→ [{}] {msg:?}", self.session_id)
-                }
+                Ok(Some(msg)) => println!("→ [{}] {msg}", self.session_id),
                 Ok(None) => {
                     break;
                 }
@@ -47,11 +45,11 @@ impl HalfSession for ClientToUpstreamSession {
     }
 
     fn connection_closed(&self) {
-        println!("[{}] Client closed the connection", self.session_id);
+        println!("× [{}] Client closed the connection", self.session_id);
     }
 
     fn cancel_requested(&self) {
-        println!("[{}] Closing connection from client", self.session_id);
+        println!("× [{}] Closing connection from client", self.session_id);
     }
 }
 
@@ -72,7 +70,7 @@ impl HalfSession for UpstreamToClientSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => println!("← [{}] {msg:?}", self.session_id),
+                Ok(Some(msg)) => println!("← [{}] {msg}", self.session_id),
                 Ok(None) => {
                     break;
                 }
@@ -82,11 +80,11 @@ impl HalfSession for UpstreamToClientSession {
     }
 
     fn connection_closed(&self) {
-        println!("[{}] Upstream closed the connection", self.session_id);
+        println!("× [{}] Upstream closed the connection", self.session_id);
     }
 
     fn cancel_requested(&self) {
-        println!("[{}] Closing connection to upstream", self.session_id);
+        println!("× [{}] Closing connection to upstream", self.session_id);
     }
 }
 
@@ -94,20 +92,21 @@ impl HalfSession for UpstreamToClientSession {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr).await?;
-    println!("Listening on {addr}");
+    println!("👂Listening on {addr}");
     let last_session_id = AtomicU8::new(0);
 
     loop {
         let (mut client, client_addr) = listener.accept().await?;
         let session_id = last_session_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        println!("[{session_id}] Received a client connection from {client_addr}");
+        println!("→ [{session_id}] Received a client connection from {client_addr}");
 
         tokio::spawn(async move {
-            let upstream_addr = "127.0.0.1:5433";
+            // let upstream_addr = "127.0.0.1:5433";
+            let upstream_addr = "127.0.0.1:5431";
             let mut upstream = match TcpStream::connect(upstream_addr).await {
                 Ok(upstream) => upstream,
                 Err(e) => {
-                    eprintln!("[{session_id}] failed to connect to upstream; err = {e:?}");
+                    eprintln!("× [{session_id}] failed to connect to upstream; err = {e:?}");
                     return;
                 }
             };
@@ -151,12 +150,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             if let Err(e) = client_res {
                 eprintln!(
-                    "[{session_id}] Error while copying bytes from client to upstream; err = {e:?}"
+                    "× [{session_id}] Error while copying bytes from client to upstream; err = {e:?}"
                 );
             }
             if let Err(e) = upstream_res {
                 eprintln!(
-                    "[{session_id}] Error while copying bytes from upstream to client; err = {e:?}"
+                    "× [{session_id}] Error while copying bytes from upstream to client; err = {e:?}"
                 );
             }
         });

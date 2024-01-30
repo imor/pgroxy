@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
@@ -13,6 +16,15 @@ pub enum ClientMessage {
     Subsequent(SubsequentMessage),
 }
 
+impl Display for ClientMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClientMessage::First(msg) => write!(f, "{msg}"),
+            ClientMessage::Subsequent(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
 /// FirstMessage is the first message sent by a client to the server.
 /// It contains length of the message in the first four bytes interpreted
 /// as a big endian i32. The next four bytes contain the type, again
@@ -24,6 +36,23 @@ pub enum FirstMessage {
     CancelRequest(CancelRequestBody),
     SslRequest,
     GssEncRequest,
+}
+
+impl Display for FirstMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FirstMessage::StartupMessage(msg) => write!(f, "{msg}"),
+            FirstMessage::CancelRequest(req) => write!(f, "{req}"),
+            FirstMessage::SslRequest => {
+                writeln!(f)?;
+                writeln!(f, "  Type: SSLRequest")
+            }
+            FirstMessage::GssEncRequest => {
+                writeln!(f)?;
+                writeln!(f, "  Type: GSSENCRequest")
+            }
+        }
+    }
 }
 
 const CANCEL_REQUEST_TYPE: i32 = 80877102;
@@ -112,6 +141,33 @@ pub struct StartupMessageBody {
     pub parameters: Vec<String>, // TODO use pairs of parameters ie. Vec<(String, String)
 }
 
+impl StartupMessageBody {
+    fn major_minor_protocol_version(&self) -> (i16, i16) {
+        let major = (self.protocol_version >> 16) as i16;
+        let minor = self.protocol_version as i16;
+        (major, minor)
+    }
+}
+
+impl Display for StartupMessageBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: StartupMessage")?;
+        let (major, minor) = self.major_minor_protocol_version();
+        writeln!(f, "  Protocol Version: {major}.{minor}")?;
+        for param_pair in self.parameters.chunks(2) {
+            if param_pair.len() == 2 {
+                writeln!(f, "  Parameter: {} = {}", param_pair[0], param_pair[1])?;
+            } else if param_pair.len() == 1 {
+                writeln!(f, "  Parameter: {}", param_pair[0])?;
+            } else {
+                unreachable!()
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Error, Debug)]
 enum ParseStartupMessageBodyError {
     #[error("invalid param: {0}")]
@@ -162,6 +218,15 @@ pub struct CancelRequestBody {
     pub secret_key: i32,
 }
 
+impl Display for CancelRequestBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CancelRequest")?;
+        writeln!(f, "  ProcessId: {}", self.process_id)?;
+        writeln!(f, "  SecretKey: {}", self.secret_key)
+    }
+}
+
 #[derive(Error, Debug)]
 enum ParseCancelRequestBodyError {
     #[error("invalid length of cancel request. Expected {0}, actual {1}")]
@@ -193,6 +258,19 @@ pub enum SubsequentMessage {
     Query(QueryBody),
     Unknown(super::UnknownMessageBody),
     Terminate,
+}
+
+impl Display for SubsequentMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SubsequentMessage::Query(query) => write!(f, "{query}"),
+            SubsequentMessage::Unknown(body) => write!(f, "{body}"),
+            SubsequentMessage::Terminate => {
+                write!(f, "")?;
+                write!(f, "  Type: Terminate")
+            }
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -251,6 +329,14 @@ impl SubsequentMessage {
 #[derive(Debug)]
 pub struct QueryBody {
     pub query: String,
+}
+
+impl Display for QueryBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: Query")?;
+        writeln!(f, "  Query: {}", self.query)
+    }
 }
 
 #[derive(Error, Debug)]

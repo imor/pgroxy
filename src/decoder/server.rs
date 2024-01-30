@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
@@ -19,6 +22,23 @@ pub enum ServerMessage {
     DataRow(DataRowBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
+}
+
+impl Display for ServerMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServerMessage::Authentication(body) => write!(f, "{body}"),
+            ServerMessage::Ssl(body) => write!(f, "{body}"),
+            ServerMessage::ParameterStatus(body) => write!(f, "{body}"),
+            ServerMessage::BackendKeyData(body) => write!(f, "{body}"),
+            ServerMessage::ReadyForQuery(body) => write!(f, "{body}"),
+            ServerMessage::RowDescription(body) => write!(f, "{body}"),
+            ServerMessage::CommandCompelte(body) => write!(f, "{body}"),
+            ServerMessage::DataRow(body) => write!(f, "{body}"),
+            ServerMessage::Error(body) => write!(f, "{body}"),
+            ServerMessage::Unknown(body) => write!(f, "{body}"),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -136,6 +156,7 @@ impl ServerMessage {
     }
 }
 
+//TODO: Some variants have byte data, add that.
 #[derive(Debug)]
 pub enum AuthenticationRequest {
     AuthenticationOk,
@@ -148,6 +169,27 @@ pub enum AuthenticationRequest {
     AuthenticationSasl,
     AuthenticationSaslContinue,
     AuthenticationSaslFinal,
+}
+
+impl Display for AuthenticationRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        let typ = match self {
+            AuthenticationRequest::AuthenticationOk => "AuthenticationOk",
+            AuthenticationRequest::AuthenticationKerberosV5 => "AuthenticationKerberosV5",
+            AuthenticationRequest::AuthenticationCleartextPassword => {
+                "AuthenticationCleartextPassword"
+            }
+            AuthenticationRequest::AuthenticationMd5Password => "AuthenticationMD5Password",
+            AuthenticationRequest::AuthenticationGss => "AuthenticationGSS",
+            AuthenticationRequest::AuthenticationGssContinue => "AuthenticationGSSContinue",
+            AuthenticationRequest::AuthenticationSspi => "AuthenticationSSPI",
+            AuthenticationRequest::AuthenticationSasl => "AuthenticationSASL",
+            AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
+            AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
+        };
+        writeln!(f, "  Type: {typ}")
+    }
 }
 
 #[derive(Error, Debug)]
@@ -277,6 +319,14 @@ pub struct SslResponse {
     accepted: bool,
 }
 
+impl Display for SslResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SSLResponse")?;
+        writeln!(f, "  Accepted: {}", self.accepted)
+    }
+}
+
 #[derive(Error, Debug)]
 enum SslResponseParseError {
     #[error("invalid ssl response tag: {0}")]
@@ -304,6 +354,14 @@ impl SslResponse {
 pub struct ParameterStatusBody {
     pub param_name: String,
     pub param_value: String,
+}
+
+impl Display for ParameterStatusBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: ParameterStatus")?;
+        writeln!(f, "  Parameter: {} = {}", self.param_name, self.param_value)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -351,6 +409,15 @@ pub struct BackendKeyDataBody {
     pub secret_key: i32,
 }
 
+impl Display for BackendKeyDataBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: BackendKeyData")?;
+        writeln!(f, "  ProcessId: {}", self.process_id)?;
+        writeln!(f, "  SecretKey: {}", self.secret_key)
+    }
+}
+
 #[derive(Error, Debug)]
 enum BackendKeyDataBodyParseError {
     #[error("invalid message length {0}. It should be {1}")]
@@ -382,6 +449,25 @@ impl BackendKeyDataBody {
 #[derive(Debug)]
 pub struct ReadyForQueryBody {
     pub transaction_status: u8,
+}
+
+impl ReadyForQueryBody {
+    fn trasaction_status(&self) -> &'static str {
+        match self.transaction_status {
+            b'I' => "Idle",
+            b'T' => "In transaction block",
+            b'E' => "In failed transaction block",
+            _ => "Unknown",
+        }
+    }
+}
+
+impl Display for ReadyForQueryBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: ReadyForQuery")?;
+        writeln!(f, "  TransactionStatus: {}", self.trasaction_status())
+    }
 }
 
 #[derive(Error, Debug)]
@@ -465,6 +551,21 @@ pub struct RowDescriptionBody {
     pub fields: Vec<RowDescriptionField>,
 }
 
+impl Display for RowDescriptionBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: RowDescription")?;
+        for field in &self.fields {
+            writeln!(
+                f,
+                "  Field: name = {}, oid = {}, attnum = {}, typeoid = {}, typelen = {}, typmod = {}, format = {}",
+                field.name, field.oid, field.attnum, field.typoid, field.typlen, field.typmod, field.format
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Error, Debug)]
 enum RowDescriptionBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
@@ -516,6 +617,14 @@ impl RowDescriptionBody {
 #[derive(Debug)]
 pub struct CommandCompleteBody {
     pub command_tag: String,
+}
+
+impl Display for CommandCompleteBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CommandComplete")?;
+        writeln!(f, "  Tag: {}", self.command_tag)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -581,6 +690,17 @@ impl DataRowColumn {
 #[derive(Debug)]
 pub struct DataRowBody {
     pub columns: Vec<DataRowColumn>,
+}
+
+impl Display for DataRowBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: DataRow")?;
+        for column in &self.columns {
+            writeln!(f, "  Column: value = {:?}", column.value)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]
@@ -661,6 +781,17 @@ impl ErrorField {
 #[derive(Debug)]
 pub struct ErrorResponseBody {
     pub fields: Vec<ErrorField>,
+}
+
+impl Display for ErrorResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: ErrorResponse")?;
+        for field in &self.fields {
+            writeln!(f, "  Field: code = {}, value = {}", field.code, field.value)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug)]
