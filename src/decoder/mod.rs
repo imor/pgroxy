@@ -100,6 +100,39 @@ impl CopyDataBody {
 }
 
 #[derive(Debug)]
+pub struct CopyDoneBody;
+
+impl Display for CopyDoneBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyDone")
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyDoneBodyParseError {
+    #[error("invalid message length {0}. It should be {1}")]
+    InvalidLength(usize, usize),
+}
+
+impl CopyDoneBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CopyDoneBody>, CopyDoneBodyParseError> {
+        let body_buf = &buf[5..];
+        if length < 4 {
+            buf.advance(length + 1);
+            return Err(CopyDoneBodyParseError::InvalidLength(length, 4));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        Ok(Some(CopyDoneBody))
+    }
+}
+
+#[derive(Debug)]
 pub struct UnknownMessageBody {
     pub header: Header,
     pub bytes: Vec<u8>,
