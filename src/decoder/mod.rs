@@ -63,6 +63,43 @@ impl Header {
 }
 
 #[derive(Debug)]
+pub struct CopyDataBody {
+    data: Vec<u8>,
+}
+
+impl Display for CopyDataBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyData")?;
+        writeln!(f, "  Data: {:?}", self.data)
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyDataBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+}
+
+impl CopyDataBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<CopyDataBody>, CopyDataBodyParseError> {
+        let body_buf = &buf[5..];
+        if length < 4 {
+            buf.advance(length + 1);
+            return Err(CopyDataBodyParseError::LengthTooShort(length, 4));
+        }
+        if body_buf.len() < length - 4 {
+            return Ok(None);
+        }
+        let data = body_buf[..length - 4].to_vec();
+        Ok(Some(CopyDataBody { data }))
+    }
+}
+
+#[derive(Debug)]
 pub struct UnknownMessageBody {
     pub header: Header,
     pub bytes: Vec<u8>,

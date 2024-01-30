@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{read_cstr, HeaderParseError, ReadCStrError};
+use super::{read_cstr, CopyDataBody, CopyDataBodyParseError, HeaderParseError, ReadCStrError};
 
 #[derive(Debug)]
 pub enum ServerMessage {
@@ -20,6 +20,7 @@ pub enum ServerMessage {
     RowDescription(RowDescriptionBody),
     CommandCompelte(CommandCompleteBody),
     DataRow(DataRowBody),
+    CopyData(CopyDataBody),
     CopyBoth(CopyBothResponseBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
@@ -36,6 +37,7 @@ impl Display for ServerMessage {
             ServerMessage::RowDescription(body) => write!(f, "{body}"),
             ServerMessage::CommandCompelte(body) => write!(f, "{body}"),
             ServerMessage::DataRow(body) => write!(f, "{body}"),
+            ServerMessage::CopyData(body) => write!(f, "{body}"),
             ServerMessage::CopyBoth(body) => write!(f, "{body}"),
             ServerMessage::Error(body) => write!(f, "{body}"),
             ServerMessage::Unknown(body) => write!(f, "{body}"),
@@ -69,6 +71,9 @@ enum ServerMessageParseError {
     #[error("invalid data row body message: {0}")]
     DataRow(#[from] DataRowBodyParseError),
 
+    #[error("invalid copy data message: {0}")]
+    CopyData(#[from] CopyDataBodyParseError),
+
     #[error("invalid copy both message: {0}")]
     CopyBoth(#[from] CopyBothResponseBodyParseError),
 
@@ -92,6 +97,7 @@ const READY_FOR_QUERY_MESSAGE_TAG: u8 = b'Z';
 const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
 const DATA_ROW_MESSAGE_TAG: u8 = b'D';
+const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 const COPY_BOTH_MESSAGE_TAG: u8 = b'W';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
@@ -148,6 +154,12 @@ impl ServerMessage {
                         DATA_ROW_MESSAGE_TAG => {
                             match DataRowBody::parse(header.length as usize, buf)? {
                                 Some(body) => Ok(Some(Self::DataRow(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                        COPY_DATA_MESSAGE_TAG => {
+                            match CopyDataBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(Self::CopyData(body))),
                                 None => return Ok(None),
                             }
                         }
