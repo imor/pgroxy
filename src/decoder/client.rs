@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
+use super::{CopyDataBodyParseError, HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -260,19 +260,21 @@ impl CancelRequestBody {
 #[derive(Debug)]
 pub enum SubsequentMessage {
     Query(QueryBody),
-    Unknown(super::UnknownMessageBody),
+    CopyData(super::CopyDataBody),
     Terminate,
+    Unknown(super::UnknownMessageBody),
 }
 
 impl Display for SubsequentMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SubsequentMessage::Query(query) => write!(f, "{query}"),
-            SubsequentMessage::Unknown(body) => write!(f, "{body}"),
+            SubsequentMessage::CopyData(body) => write!(f, "{body}"),
             SubsequentMessage::Terminate => {
                 writeln!(f)?;
                 writeln!(f, "  Type: Terminate")
             }
+            SubsequentMessage::Unknown(body) => write!(f, "{body}"),
         }
     }
 }
@@ -287,6 +289,9 @@ enum ParseSubsequenceMessageError {
 
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
+
+    #[error("copy data body parse error: {0}")]
+    CopyData(#[from] CopyDataBodyParseError),
 }
 
 impl From<ParseSubsequenceMessageError> for std::io::Error {
@@ -297,6 +302,7 @@ impl From<ParseSubsequenceMessageError> for std::io::Error {
 
 const QUERY_MESSAGE_TAG: u8 = b'Q';
 const TERMINATE_MESSAGE_TAG: u8 = b'X';
+const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 
 impl SubsequentMessage {
     fn parse(
@@ -309,6 +315,12 @@ impl SubsequentMessage {
                         Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
                         None => return Ok(None),
                     },
+                    COPY_DATA_MESSAGE_TAG => {
+                        match super::CopyDataBody::parse(header.length as usize, buf)? {
+                            Some(body) => Ok(Some(SubsequentMessage::CopyData(body))),
+                            None => return Ok(None),
+                        }
+                    }
                     TERMINATE_MESSAGE_TAG => {
                         if header.length != 4 {
                             buf.advance(header.length as usize + 1);

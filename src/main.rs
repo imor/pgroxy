@@ -101,8 +101,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("→ [{session_id}] Received a client connection from {client_addr}");
 
         tokio::spawn(async move {
-            // let upstream_addr = "127.0.0.1:5433";
-            let upstream_addr = "127.0.0.1:5431";
+            let upstream_addr = "127.0.0.1:5433";
+            // let upstream_addr = "127.0.0.1:5431";
             let mut upstream = match TcpStream::connect(upstream_addr).await {
                 Ok(upstream) => upstream,
                 Err(e) => {

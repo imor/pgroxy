@@ -142,6 +142,7 @@ impl Display for UnknownMessageBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: Unknown")?;
+        writeln!(f, "  Tag: '{}'", self.header.tag as char)?;
         writeln!(f, "  Bytes: {:?}", self.bytes)
     }
 }
