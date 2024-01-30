@@ -388,7 +388,7 @@ impl AuthenticationRequest {
 
 #[derive(Debug)]
 pub struct SslResponse {
-    accepted: bool,
+    pub accepted: bool,
 }
 
 impl Display for SslResponse {
@@ -770,7 +770,9 @@ impl Display for DataRowBody {
         writeln!(f)?;
         writeln!(f, "  Type: DataRow")?;
         for column in &self.columns {
-            writeln!(f, "  Column: value = {:?}", column.value)?;
+            //TODO: only print in text format when a previous row description format is 0 (i.e. text)
+            let value = String::from_utf8_lossy(&column.value);
+            writeln!(f, "  Column: value = {:?}", value)?;
         }
         Ok(())
     }
@@ -1110,7 +1112,7 @@ impl ErrorResponseBody {
 }
 
 pub struct ServerMessageDecoder {
-    pub(super) protocol_state: Arc<Mutex<super::ProtocolState>>,
+    pub(super) current_protocol_state: Arc<Mutex<super::CurrentProtocolState>>,
 }
 
 impl Decoder for ServerMessageDecoder {
@@ -1119,24 +1121,12 @@ impl Decoder for ServerMessageDecoder {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut state = self
-            .protocol_state
+            .current_protocol_state
             .lock()
             .expect("failed to lock protocol_state");
         match ServerMessage::parse(buf, state.expecting_ssl_response())? {
             Some(msg) => {
-                match msg {
-                    ServerMessage::Authentication(AuthenticationRequest::AuthenticationOk) => {
-                        *state = super::ProtocolState::AuthenticationOk
-                    }
-                    ServerMessage::Ssl(SslResponse { accepted }) => {
-                        if accepted {
-                            *state = super::ProtocolState::SslAccepted
-                        } else {
-                            *state = super::ProtocolState::SslRejected
-                        }
-                    }
-                    _ => {}
-                }
+                state.server_message(&msg);
                 Ok(Some(msg))
             }
             None => Ok(None),
