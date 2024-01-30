@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
+use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use super::{read_cstr, HeaderParseError, ReadCStrError};
@@ -20,93 +21,33 @@ pub enum ServerMessage {
     Unknown(super::UnknownMessageBody),
 }
 
+#[derive(Error, Debug)]
 enum ServerMessageParseError {
-    Header(HeaderParseError),
-    Ssl(SslResponseParseError),
-    Authentication(AuthenticationRequestParseError),
-    ParamStatus(ParameterStatusBodyParseError),
-    BackendKeyData(BackendKeyDataBodyParseError),
-    RowDescription(RowDescriptionBodyParseError),
-    CommandComplete(CommandCompleteBodyParseError),
-    DataRow(DataRowBodyParseError),
-    Error(ErrorResponseBodyParseError),
-    ReadyForQuery(ReadyForQueryBodyParseError),
-}
-
-impl From<HeaderParseError> for ServerMessageParseError {
-    fn from(value: HeaderParseError) -> Self {
-        ServerMessageParseError::Header(value)
-    }
-}
-
-impl From<SslResponseParseError> for ServerMessageParseError {
-    fn from(value: SslResponseParseError) -> Self {
-        ServerMessageParseError::Ssl(value)
-    }
-}
-
-impl From<AuthenticationRequestParseError> for ServerMessageParseError {
-    fn from(value: AuthenticationRequestParseError) -> Self {
-        ServerMessageParseError::Authentication(value)
-    }
-}
-
-impl From<ParameterStatusBodyParseError> for ServerMessageParseError {
-    fn from(value: ParameterStatusBodyParseError) -> Self {
-        ServerMessageParseError::ParamStatus(value)
-    }
-}
-
-impl From<BackendKeyDataBodyParseError> for ServerMessageParseError {
-    fn from(value: BackendKeyDataBodyParseError) -> Self {
-        ServerMessageParseError::BackendKeyData(value)
-    }
-}
-
-impl From<ReadyForQueryBodyParseError> for ServerMessageParseError {
-    fn from(value: ReadyForQueryBodyParseError) -> Self {
-        ServerMessageParseError::ReadyForQuery(value)
-    }
-}
-
-impl From<RowDescriptionBodyParseError> for ServerMessageParseError {
-    fn from(value: RowDescriptionBodyParseError) -> Self {
-        ServerMessageParseError::RowDescription(value)
-    }
-}
-
-impl From<CommandCompleteBodyParseError> for ServerMessageParseError {
-    fn from(value: CommandCompleteBodyParseError) -> Self {
-        ServerMessageParseError::CommandComplete(value)
-    }
-}
-
-impl From<DataRowBodyParseError> for ServerMessageParseError {
-    fn from(value: DataRowBodyParseError) -> Self {
-        ServerMessageParseError::DataRow(value)
-    }
-}
-
-impl From<ErrorResponseBodyParseError> for ServerMessageParseError {
-    fn from(value: ErrorResponseBodyParseError) -> Self {
-        ServerMessageParseError::Error(value)
-    }
+    #[error("invalid header: {0}")]
+    Header(#[from] HeaderParseError),
+    #[error("invalid ssl response: {0}")]
+    Ssl(#[from] SslResponseParseError),
+    #[error("invalid authentication request message: {0}")]
+    Authentication(#[from] AuthenticationRequestParseError),
+    #[error("invalid parameter status message: {0}")]
+    ParamStatus(#[from] ParameterStatusBodyParseError),
+    #[error("invalid backend key data message: {0}")]
+    BackendKeyData(#[from] BackendKeyDataBodyParseError),
+    #[error("invalid row description body message: {0}")]
+    RowDescription(#[from] RowDescriptionBodyParseError),
+    #[error("invalid command complete message: {0}")]
+    CommandComplete(#[from] CommandCompleteBodyParseError),
+    #[error("invalid data row body message: {0}")]
+    DataRow(#[from] DataRowBodyParseError),
+    #[error("invalid error response message: {0}")]
+    Error(#[from] ErrorResponseBodyParseError),
+    #[error("invalid ready for query message: {0}")]
+    ReadyForQuery(#[from] ReadyForQueryBodyParseError),
 }
 
 impl From<ServerMessageParseError> for std::io::Error {
     fn from(value: ServerMessageParseError) -> Self {
-        match value {
-            ServerMessageParseError::Header(e) => e.into(),
-            ServerMessageParseError::Ssl(e) => e.into(),
-            ServerMessageParseError::Authentication(e) => e.into(),
-            ServerMessageParseError::ParamStatus(e) => e.into(),
-            ServerMessageParseError::BackendKeyData(e) => e.into(),
-            ServerMessageParseError::ReadyForQuery(e) => e.into(),
-            ServerMessageParseError::RowDescription(e) => e.into(),
-            ServerMessageParseError::CommandComplete(e) => e.into(),
-            ServerMessageParseError::DataRow(e) => e.into(),
-            ServerMessageParseError::Error(e) => e.into(),
-        }
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{value}"))
     }
 }
 
@@ -223,31 +164,14 @@ pub enum AuthenticationRequest {
     AuthenticationSaslFinal,
 }
 
+#[derive(Error, Debug)]
 enum AuthenticationRequestParseError {
+    #[error("invalid message length {0}. It should be {1}")]
     InvalidLength(usize, usize),
+    #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooShort(usize, usize),
+    #[error("invalid type {0}")]
     InvalidType(i32),
-}
-
-impl From<AuthenticationRequestParseError> for std::io::Error {
-    fn from(value: AuthenticationRequestParseError) -> Self {
-        match value {
-            AuthenticationRequestParseError::InvalidLength(expected, actual) => {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid length {actual}. It should be {expected}"),
-                )
-            }
-            AuthenticationRequestParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid length {length}. It should be greater than {limit}"),
-            ),
-            AuthenticationRequestParseError::InvalidType(typ) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid type {typ}"),
-            ),
-        }
-    }
 }
 
 const AUTHETICATION_OK_TYPE: i32 = 0;
@@ -277,7 +201,7 @@ impl AuthenticationRequest {
             AUTHETICATION_OK_TYPE => {
                 if length != 8 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(8, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationOk))
                 }
@@ -285,7 +209,7 @@ impl AuthenticationRequest {
             AUTHETICATION_KERBEROS_TYPE => {
                 if length != 8 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(8, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationKerberosV5))
                 }
@@ -293,7 +217,7 @@ impl AuthenticationRequest {
             AUTHETICATION_CLEARTEXT_PWD_TYPE => {
                 if length != 8 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(8, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationCleartextPassword))
                 }
@@ -301,7 +225,7 @@ impl AuthenticationRequest {
             AUTHETICATION_MD5_PWD_TYPE => {
                 if length != 12 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(12, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 12))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationMd5Password))
                 }
@@ -309,7 +233,7 @@ impl AuthenticationRequest {
             AUTHETICATION_GSS_TYPE => {
                 if length != 8 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(8, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationGss))
                 }
@@ -325,7 +249,7 @@ impl AuthenticationRequest {
             AUTHETICATION_SSPI_TYPE => {
                 if length != 8 {
                     buf.advance(length + 1);
-                    Err(AuthenticationRequestParseError::InvalidLength(8, length))
+                    Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
                     Ok(Some(AuthenticationRequest::AuthenticationSspi))
                 }
@@ -367,19 +291,10 @@ pub struct SslResponse {
     accepted: bool,
 }
 
+#[derive(Error, Debug)]
 enum SslResponseParseError {
+    #[error("invalid ssl response tag: {0}")]
     InvalidTag(u8),
-}
-
-impl From<SslResponseParseError> for std::io::Error {
-    fn from(value: SslResponseParseError) -> Self {
-        match value {
-            SslResponseParseError::InvalidTag(tag) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid SslResponse tag: {tag}"),
-            ),
-        }
-    }
 }
 
 impl SslResponse {
@@ -405,18 +320,12 @@ pub struct ParameterStatusBody {
     pub param_value: String,
 }
 
+#[derive(Error, Debug)]
 enum ParameterStatusBodyParseError {
+    #[error("invalid parameter name: {0}")]
     InvalidParamName(ReadCStrError),
+    #[error("invalid parameter value: {0}")]
     InvalidParamValue(ReadCStrError),
-}
-
-impl From<ParameterStatusBodyParseError> for std::io::Error {
-    fn from(value: ParameterStatusBodyParseError) -> Self {
-        match value {
-            ParameterStatusBodyParseError::InvalidParamName(e) => e.into(),
-            ParameterStatusBodyParseError::InvalidParamValue(e) => e.into(),
-        }
-    }
 }
 
 impl ParameterStatusBody {
@@ -456,21 +365,10 @@ pub struct BackendKeyDataBody {
     pub secret_key: i32,
 }
 
+#[derive(Error, Debug)]
 enum BackendKeyDataBodyParseError {
+    #[error("invalid message length {0}. It should be {1}")]
     InvalidLength(usize, usize),
-}
-
-impl From<BackendKeyDataBodyParseError> for std::io::Error {
-    fn from(value: BackendKeyDataBodyParseError) -> Self {
-        match value {
-            BackendKeyDataBodyParseError::InvalidLength(expected, actual) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid BackendKeyDataBody message length {actual}. It should be {expected}"
-                ),
-            ),
-        }
-    }
 }
 
 impl BackendKeyDataBody {
@@ -484,7 +382,7 @@ impl BackendKeyDataBody {
         }
         let res = if length != 12 {
             buf.advance(length + 1);
-            Err(BackendKeyDataBodyParseError::InvalidLength(12, length))
+            Err(BackendKeyDataBodyParseError::InvalidLength(length, 12))
         } else {
             Ok(Some(BackendKeyDataBody {
                 process_id: BigEndian::read_i32(&body_buf[..4]),
@@ -500,19 +398,10 @@ pub struct ReadyForQueryBody {
     pub transaction_status: u8,
 }
 
+#[derive(Error, Debug)]
 enum ReadyForQueryBodyParseError {
+    #[error("invalid message length {0}. It should be {1}")]
     InvalidLength(usize, usize),
-}
-
-impl From<ReadyForQueryBodyParseError> for std::io::Error {
-    fn from(value: ReadyForQueryBodyParseError) -> Self {
-        match value {
-            ReadyForQueryBodyParseError::InvalidLength(expected, actual) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid ReadyForQuery message length {actual}. It should be {expected}"),
-            ),
-        }
-    }
 }
 
 impl ReadyForQueryBody {
@@ -526,7 +415,7 @@ impl ReadyForQueryBody {
         }
         let res = if length != 5 {
             buf.advance(length + 1);
-            Err(ReadyForQueryBodyParseError::InvalidLength(5, length))
+            Err(ReadyForQueryBodyParseError::InvalidLength(length, 5))
         } else {
             Ok(Some(ReadyForQueryBody {
                 transaction_status: body_buf[0],
@@ -547,14 +436,10 @@ pub struct RowDescriptionField {
     pub format: i16,
 }
 
+#[derive(Error, Debug)]
 enum RowDescriptionFieldParseError {
-    InvalidName(ReadCStrError),
-}
-
-impl From<ReadCStrError> for RowDescriptionFieldParseError {
-    fn from(value: ReadCStrError) -> Self {
-        RowDescriptionFieldParseError::InvalidName(value)
-    }
+    #[error("invalid name {0}")]
+    InvalidName(#[from] ReadCStrError),
 }
 
 impl RowDescriptionField {
@@ -595,37 +480,14 @@ pub struct RowDescriptionBody {
     pub fields: Vec<RowDescriptionField>,
 }
 
+#[derive(Error, Debug)]
 enum RowDescriptionBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+    #[error("invalid number of fields {0}")]
     InvalidNumFields(i16),
-    InvalidField(RowDescriptionFieldParseError),
-}
-
-impl From<RowDescriptionBodyParseError> for std::io::Error {
-    fn from(value: RowDescriptionBodyParseError) -> Self {
-        match value {
-            RowDescriptionBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid RowDescription message length {length}. It should be at least {limit}"
-                ),
-            ),
-            RowDescriptionBodyParseError::InvalidNumFields(num_fields) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid number of fields {num_fields} in RowDescription message"),
-            ),
-            RowDescriptionBodyParseError::InvalidField(_) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid field in RowDescription message"),
-            ),
-        }
-    }
-}
-
-impl From<RowDescriptionFieldParseError> for RowDescriptionBodyParseError {
-    fn from(value: RowDescriptionFieldParseError) -> Self {
-        RowDescriptionBodyParseError::InvalidField(value)
-    }
+    #[error("invalid field {0}")]
+    InvalidField(#[from] RowDescriptionFieldParseError),
 }
 
 impl RowDescriptionBody {
@@ -665,29 +527,12 @@ pub struct CommandCompleteBody {
     pub command_tag: String,
 }
 
+#[derive(Error, Debug)]
 enum CommandCompleteBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
-    InvalidCommandTag(ReadCStrError),
-}
-
-impl From<CommandCompleteBodyParseError> for std::io::Error {
-    fn from(value: CommandCompleteBodyParseError) -> Self {
-        match value {
-            CommandCompleteBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid CommandComplete message length {length}. It should be at least {limit}"
-                ),
-            ),
-            CommandCompleteBodyParseError::InvalidCommandTag(e) => e.into(),
-        }
-    }
-}
-
-impl From<ReadCStrError> for CommandCompleteBodyParseError {
-    fn from(value: ReadCStrError) -> Self {
-        CommandCompleteBodyParseError::InvalidCommandTag(value)
-    }
+    #[error("invalid command tag: {0}")]
+    InvalidCommandTag(#[from] ReadCStrError),
 }
 
 impl CommandCompleteBody {
@@ -713,7 +558,11 @@ pub struct DataRowColumn {
     pub value: Vec<u8>,
 }
 
-struct DataRowColumnParseError(i32);
+#[derive(Error, Debug)]
+enum DataRowColumnParseError {
+    #[error("invalid length {0}")]
+    InvalidLength(i32),
+}
 
 impl DataRowColumn {
     fn parse(buf: &[u8]) -> Result<Option<(DataRowColumn, usize)>, DataRowColumnParseError> {
@@ -727,7 +576,7 @@ impl DataRowColumn {
         }
         if len < 0 {
             //TODO: advance before early return due to error
-            return Err(DataRowColumnParseError(len));
+            return Err(DataRowColumnParseError::InvalidLength(len));
         }
         if buf.len() < len as usize + 4 {
             return Ok(None);
@@ -744,37 +593,14 @@ pub struct DataRowBody {
     pub columns: Vec<DataRowColumn>,
 }
 
+#[derive(Error, Debug)]
 enum DataRowBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+    #[error("invalid number of columns {0}")]
     InvalidNumCols(i16),
-    InvalidColumnLength(DataRowColumnParseError),
-}
-
-impl From<DataRowBodyParseError> for std::io::Error {
-    fn from(value: DataRowBodyParseError) -> Self {
-        match value {
-            DataRowBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid DataRow message length {length}. It should be at least {limit}"),
-            ),
-            DataRowBodyParseError::InvalidNumCols(num_cols) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid number of columns {num_cols} in DataRow message"),
-            ),
-            DataRowBodyParseError::InvalidColumnLength(DataRowColumnParseError(length)) => {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid column length {length} in DataRow message"),
-                )
-            }
-        }
-    }
-}
-
-impl From<DataRowColumnParseError> for DataRowBodyParseError {
-    fn from(value: DataRowColumnParseError) -> Self {
-        DataRowBodyParseError::InvalidColumnLength(value)
-    }
+    #[error("invalid column length: {0}")]
+    InvalidColumnLength(#[from] DataRowColumnParseError),
 }
 
 impl DataRowBody {
@@ -841,27 +667,12 @@ pub struct ErrorResponseBody {
     pub fields: Vec<ErrorField>,
 }
 
+#[derive(Error, Debug)]
 enum ErrorResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
-    InvalidField(ReadCStrError),
-}
-
-impl From<ErrorResponseBodyParseError> for std::io::Error {
-    fn from(value: ErrorResponseBodyParseError) -> Self {
-        match value {
-            ErrorResponseBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid length {length}. It should be greater than {limit}"),
-            ),
-            ErrorResponseBodyParseError::InvalidField(e) => e.into(),
-        }
-    }
-}
-
-impl From<ReadCStrError> for ErrorResponseBodyParseError {
-    fn from(value: ReadCStrError) -> Self {
-        ErrorResponseBodyParseError::InvalidField(value)
-    }
+    #[error("invalid field: {0}")]
+    InvalidField(#[from] ReadCStrError),
 }
 
 impl ErrorResponseBody {

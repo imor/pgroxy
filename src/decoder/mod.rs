@@ -8,6 +8,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
+use thiserror::Error;
 
 const MAX_ALLOWED_MESSAGE_LENGTH: usize = 8 * 1024 * 1024;
 
@@ -17,24 +18,12 @@ pub struct Header {
     pub length: i32,
 }
 
+#[derive(Error, Debug)]
 enum HeaderParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+    #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooLong(usize, usize),
-}
-
-impl From<HeaderParseError> for std::io::Error {
-    fn from(value: HeaderParseError) -> Self {
-        match value {
-            HeaderParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid header length {length}. It can't be less than {limit}"),
-            ),
-            HeaderParseError::LengthTooLong(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid header length {length}. It can't be greater than  {limit}"),
-            ),
-        }
-    }
 }
 
 impl Header {
@@ -92,8 +81,11 @@ impl UnknownMessageBody {
     }
 }
 
+#[derive(Error, Debug)]
 enum ReadCStrError {
+    #[error("c string is not null terminated")]
     NotNullTerminated,
+    #[error("c string is not utf8 formatted")]
     NotUtf8Formatted,
 }
 

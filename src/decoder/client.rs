@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
+use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use super::{HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
@@ -29,41 +30,21 @@ const CANCEL_REQUEST_TYPE: i32 = 80877102;
 const SSL_REQUEST_TYPE: i32 = 80877103;
 const GSS_ENC_REQUEST_TYPE: i32 = 80877104;
 
+#[derive(Error, Debug)]
 enum ParseFirstMessageError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooSmall(usize, usize),
+    #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooLarge(usize, usize),
-    Startup(ParseStartupMessageBodyError),
-    Cancel(ParseCancelRequestBodyError),
+    #[error("invalid startup message: {0}")]
+    Startup(#[from] ParseStartupMessageBodyError),
+    #[error("invalid cancel request message: {0}")]
+    Cancel(#[from] ParseCancelRequestBodyError),
 }
 
 impl From<ParseFirstMessageError> for std::io::Error {
     fn from(value: ParseFirstMessageError) -> Self {
-        match value {
-            ParseFirstMessageError::LengthTooSmall(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid length {length}. It can't be less than {limit}"),
-            ),
-            ParseFirstMessageError::LengthTooLarge(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "Message of length {length} is too large. It can't be greater than {limit}"
-                ),
-            ),
-            ParseFirstMessageError::Startup(e) => e.into(),
-            ParseFirstMessageError::Cancel(e) => e.into(),
-        }
-    }
-}
-
-impl From<ParseStartupMessageBodyError> for ParseFirstMessageError {
-    fn from(value: ParseStartupMessageBodyError) -> Self {
-        ParseFirstMessageError::Startup(value)
-    }
-}
-
-impl From<ParseCancelRequestBodyError> for ParseFirstMessageError {
-    fn from(value: ParseCancelRequestBodyError) -> Self {
-        ParseFirstMessageError::Cancel(value)
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{value}"))
     }
 }
 
@@ -135,27 +116,12 @@ pub struct StartupMessageBody {
     pub parameters: Vec<String>, // TODO use pairs of parameters ie. Vec<(String, String)
 }
 
+#[derive(Error, Debug)]
 enum ParseStartupMessageBodyError {
-    InvalidParam(ReadCStrError),
+    #[error("invalid param: {0}")]
+    InvalidParam(#[from] ReadCStrError),
+    #[error("startup message is not null terminated")]
     NotNullTerminated,
-}
-
-impl From<ParseStartupMessageBodyError> for std::io::Error {
-    fn from(value: ParseStartupMessageBodyError) -> Self {
-        match value {
-            ParseStartupMessageBodyError::InvalidParam(e) => e.into(),
-            ParseStartupMessageBodyError::NotNullTerminated => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid startup message: not null terminated",
-            ),
-        }
-    }
-}
-
-impl From<ReadCStrError> for ParseStartupMessageBodyError {
-    fn from(value: ReadCStrError) -> Self {
-        ParseStartupMessageBodyError::InvalidParam(value)
-    }
 }
 
 impl StartupMessageBody {
@@ -200,19 +166,10 @@ pub struct CancelRequestBody {
     pub secret_key: i32,
 }
 
+#[derive(Error, Debug)]
 enum ParseCancelRequestBodyError {
+    #[error("invalid length of cancel request. Expected {0}, actual {1}")]
     InvalidLength(usize, usize),
-}
-
-impl From<ParseCancelRequestBodyError> for std::io::Error {
-    fn from(value: ParseCancelRequestBodyError) -> Self {
-        match value {
-            ParseCancelRequestBodyError::InvalidLength(expected, actual) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid Cancel message length. Expected {expected}, actual {actual}"),
-            ),
-        }
-    }
 }
 
 impl CancelRequestBody {
@@ -242,38 +199,19 @@ pub enum SubsequentMessage {
     Terminate,
 }
 
+#[derive(Error, Debug)]
 enum ParseSubsequenceMessageError {
+    #[error("invalid message length {0}. It should be {1}")]
     InvalidTerminateLength(usize, usize),
-    Header(HeaderParseError),
-    QueryBody(QueryBodyParseError),
+    #[error("header parse error: {0}")]
+    Header(#[from] HeaderParseError),
+    #[error("query body parse error: {0}")]
+    QueryBody(#[from] QueryBodyParseError),
 }
 
 impl From<ParseSubsequenceMessageError> for std::io::Error {
     fn from(value: ParseSubsequenceMessageError) -> Self {
-        match value {
-            ParseSubsequenceMessageError::InvalidTerminateLength(expected, actual) => {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "Invalid Terminate message length. Expected {expected}, actual {actual}"
-                    ),
-                )
-            }
-            ParseSubsequenceMessageError::Header(e) => e.into(),
-            ParseSubsequenceMessageError::QueryBody(e) => e.into(),
-        }
-    }
-}
-
-impl From<HeaderParseError> for ParseSubsequenceMessageError {
-    fn from(value: HeaderParseError) -> Self {
-        ParseSubsequenceMessageError::Header(value)
-    }
-}
-
-impl From<QueryBodyParseError> for ParseSubsequenceMessageError {
-    fn from(value: QueryBodyParseError) -> Self {
-        ParseSubsequenceMessageError::QueryBody(value)
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{value}"))
     }
 }
 
@@ -323,27 +261,12 @@ pub struct QueryBody {
     pub query: String,
 }
 
+#[derive(Error, Debug)]
 enum QueryBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
-    InvalidQuery(ReadCStrError),
-}
-
-impl From<QueryBodyParseError> for std::io::Error {
-    fn from(value: QueryBodyParseError) -> Self {
-        match value {
-            QueryBodyParseError::LengthTooShort(length, limit) => std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid length {length} for Query message. It should be at least {limit}"),
-            ),
-            QueryBodyParseError::InvalidQuery(e) => e.into(),
-        }
-    }
-}
-
-impl From<ReadCStrError> for QueryBodyParseError {
-    fn from(value: ReadCStrError) -> Self {
-        QueryBodyParseError::InvalidQuery(value)
-    }
+    #[error("invalid query: {0}")]
+    InvalidQuery(#[from] ReadCStrError),
 }
 
 impl QueryBody {
