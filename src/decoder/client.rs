@@ -89,17 +89,13 @@ impl FirstMessage {
         let res = match typ {
             CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(length, buf)? {
                 Some(body) => Ok(Some(FirstMessage::CancelRequest(body))),
-                None => {
-                    return Ok(None);
-                }
+                None => return Ok(None),
             },
             SSL_REQUEST_TYPE => Ok(Some(FirstMessage::SslRequest)),
             GSS_ENC_REQUEST_TYPE => Ok(Some(FirstMessage::GssEncRequest)),
             _ => match StartupMessageBody::parse(length, typ, buf)? {
                 Some(body) => Ok(Some(FirstMessage::StartupMessage(body))),
-                None => {
-                    return Ok(None);
-                }
+                None => return Ok(None),
             },
         };
 
@@ -227,9 +223,7 @@ impl SubsequentMessage {
                 let res = match header.tag {
                     QUERY_MESSAGE_TAG => match QueryBody::parse(header.length as usize, buf)? {
                         Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
-                        None => {
-                            return Ok(None);
-                        }
+                        None => return Ok(None),
                     },
                     TERMINATE_MESSAGE_TAG => {
                         if header.length != 4 {
@@ -243,9 +237,7 @@ impl SubsequentMessage {
                     }
                     _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
                         Some(body) => Ok(Some(SubsequentMessage::Unknown(body))),
-                        None => {
-                            return Ok(None);
-                        }
+                        None => return Ok(None),
                     },
                 };
                 buf.advance(header.length as usize + 1);
