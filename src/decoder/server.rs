@@ -432,7 +432,6 @@ impl RowDescriptionField {
     fn parse(
         buf: &[u8],
     ) -> Result<Option<(RowDescriptionField, usize)>, RowDescriptionFieldParseError> {
-        //TODO: advance before early return due to error
         let (name, end_pos) = read_cstr(buf)?;
         let buf = &buf[end_pos..];
         if buf.len() < 18 {
@@ -497,9 +496,15 @@ impl RowDescriptionBody {
         body_buf = &body_buf[2..];
         let mut fields = Vec::with_capacity(num_fields as usize);
         for _ in 0..num_fields {
-            let (field, end_pos) = match RowDescriptionField::parse(body_buf)? {
-                Some(res) => res,
-                None => return Ok(None),
+            let (field, end_pos) = match RowDescriptionField::parse(body_buf) {
+                Ok(field) => match field {
+                    Some(res) => res,
+                    None => return Ok(None),
+                },
+                Err(e) => {
+                    buf.advance(length + 1);
+                    return Err(e.into());
+                }
             };
             fields.push(field);
             body_buf = &body_buf[end_pos..];
@@ -561,7 +566,6 @@ impl DataRowColumn {
             return Ok(Some((DataRowColumn { value: Vec::new() }, 4)));
         }
         if len < 0 {
-            //TODO: advance before early return due to error
             return Err(DataRowColumnParseError::InvalidLength(len));
         }
         if buf.len() < len as usize + 4 {
@@ -610,9 +614,15 @@ impl DataRowBody {
         body_buf = &body_buf[2..];
         let mut columns = Vec::with_capacity(num_cols as usize);
         for _ in 0..num_cols {
-            let (column, end_pos) = match DataRowColumn::parse(body_buf)? {
-                Some(res) => res,
-                None => return Ok(None),
+            let (column, end_pos) = match DataRowColumn::parse(body_buf) {
+                Ok(drc) => match drc {
+                    Some(res) => res,
+                    None => return Ok(None),
+                },
+                Err(e) => {
+                    buf.advance(length + 1);
+                    return Err(e.into());
+                }
             };
             columns.push(column);
             body_buf = &body_buf[end_pos..];
