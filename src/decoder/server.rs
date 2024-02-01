@@ -20,7 +20,7 @@ pub enum ServerMessage {
     BackendKeyData(BackendKeyDataBody),
     ReadyForQuery(ReadyForQueryBody),
     RowDescription(RowDescriptionBody),
-    CommandCompelte(CommandCompleteBody),
+    CommandComplete(CommandCompleteBody),
     DataRow(DataRowBody),
     CopyData(CopyDataBody),
     CopyIn(CopyInResponseBody),
@@ -40,7 +40,7 @@ impl Display for ServerMessage {
             ServerMessage::BackendKeyData(body) => write!(f, "{body}"),
             ServerMessage::ReadyForQuery(body) => write!(f, "{body}"),
             ServerMessage::RowDescription(body) => write!(f, "{body}"),
-            ServerMessage::CommandCompelte(body) => write!(f, "{body}"),
+            ServerMessage::CommandComplete(body) => write!(f, "{body}"),
             ServerMessage::DataRow(body) => write!(f, "{body}"),
             ServerMessage::CopyData(body) => write!(f, "{body}"),
             ServerMessage::CopyIn(body) => write!(f, "{body}"),
@@ -129,95 +129,144 @@ impl ServerMessage {
                 None => Ok(None),
             }
         } else {
-            match super::Header::parse(buf)? {
-                Some(header) => {
-                    let res = match header.tag {
-                        AUTHENTICATION_MESSAGE_TAG => {
-                            match AuthenticationRequest::parse(header.length as usize, buf)? {
-                                Some(auth_req) => Ok(Some(ServerMessage::Authentication(auth_req))),
-                                None => return Ok(None),
-                            }
-                        }
-                        PARAM_STATUS_MESSAGE_TAG => {
-                            match ParameterStatusBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(ServerMessage::ParameterStatus(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        BACKEND_KEY_DATA_MESSAGE_TAG => {
-                            match BackendKeyDataBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(ServerMessage::BackendKeyData(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        READY_FOR_QUERY_MESSAGE_TAG => {
-                            match ReadyForQueryBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::ReadyForQuery(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        ROW_DESCRIPTION_MESSAGE_TAG => {
-                            match RowDescriptionBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::RowDescription(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        COMMAND_COMPLETE_MESSAGE_TAG => {
-                            match CommandCompleteBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CommandCompelte(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        DATA_ROW_MESSAGE_TAG => {
-                            match DataRowBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::DataRow(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        COPY_DATA_MESSAGE_TAG => {
-                            let body = CopyDataBody::parse(header.length as usize, buf);
-                            Ok(Some(Self::CopyData(body)))
-                        }
-                        COPY_IN_MESSAGE_TAG => {
-                            match CopyInResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CopyIn(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        COPY_OUT_MESSAGE_TAG => {
-                            match CopyOutResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CopyOut(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        COPY_BOTH_MESSAGE_TAG => {
-                            match CopyBothResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CopyBoth(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        COPY_DONE_MESSAGE_TAG => {
-                            match CopyDoneBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CopyDone(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        ERROR_RESPONSE_MESSAGE_TAG => {
-                            match ErrorResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::Error(body))),
-                                None => return Ok(None),
-                            }
-                        }
-                        _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
-                            Some(body) => Ok(Some(ServerMessage::Unknown(body))),
-                            None => return Ok(None),
-                        },
-                    };
-                    buf.advance(header.skip());
-                    res
+            match Self::parse_message_with_header(buf) {
+                Ok(msg) => match msg {
+                    Some((msg, skip)) => {
+                        buf.advance(skip);
+                        Ok(Some(msg))
+                    }
+                    None => Ok(None),
+                },
+                Err((e, skip)) => {
+                    buf.advance(skip);
+                    Err(e)
                 }
-                None => Ok(None),
             }
+        }
+    }
+
+    fn parse_message_with_header(
+        buf: &mut BytesMut,
+    ) -> Result<Option<(ServerMessage, usize)>, (ServerMessageParseError, usize)> {
+        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+            Some(header) => match header.tag {
+                AUTHENTICATION_MESSAGE_TAG => {
+                    match AuthenticationRequest::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(auth_req) => Ok(Some((
+                            ServerMessage::Authentication(auth_req),
+                            header.skip(),
+                        ))),
+                        None => Ok(None),
+                    }
+                }
+                PARAM_STATUS_MESSAGE_TAG => {
+                    match ParameterStatusBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => {
+                            Ok(Some((ServerMessage::ParameterStatus(body), header.skip())))
+                        }
+                        None => Ok(None),
+                    }
+                }
+                BACKEND_KEY_DATA_MESSAGE_TAG => {
+                    match BackendKeyDataBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => {
+                            Ok(Some((ServerMessage::BackendKeyData(body), header.skip())))
+                        }
+                        None => Ok(None),
+                    }
+                }
+                READY_FOR_QUERY_MESSAGE_TAG => {
+                    match ReadyForQueryBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::ReadyForQuery(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                ROW_DESCRIPTION_MESSAGE_TAG => {
+                    match RowDescriptionBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => {
+                            Ok(Some((ServerMessage::RowDescription(body), header.skip())))
+                        }
+                        None => Ok(None),
+                    }
+                }
+                COMMAND_COMPLETE_MESSAGE_TAG => {
+                    match CommandCompleteBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => {
+                            Ok(Some((ServerMessage::CommandComplete(body), header.skip())))
+                        }
+                        None => Ok(None),
+                    }
+                }
+                DATA_ROW_MESSAGE_TAG => {
+                    match DataRowBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::DataRow(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                COPY_DATA_MESSAGE_TAG => {
+                    let body = CopyDataBody::parse(header.length as usize, buf);
+                    Ok(Some((ServerMessage::CopyData(body), header.skip())))
+                }
+                COPY_IN_MESSAGE_TAG => {
+                    match CopyInResponseBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::CopyIn(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                COPY_OUT_MESSAGE_TAG => {
+                    match CopyOutResponseBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::CopyOut(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                COPY_BOTH_MESSAGE_TAG => {
+                    match CopyBothResponseBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::CopyBoth(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                COPY_DONE_MESSAGE_TAG => {
+                    match CopyDoneBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::CopyDone(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                ERROR_RESPONSE_MESSAGE_TAG => {
+                    match ErrorResponseBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?
+                    {
+                        Some(body) => Ok(Some((ServerMessage::Error(body), header.skip()))),
+                        None => Ok(None),
+                    }
+                }
+                _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
+                    Some(body) => Ok(Some((ServerMessage::Unknown(body), header.skip()))),
+                    None => Ok(None),
+                },
+            },
+            None => Ok(None),
         }
     }
 }
