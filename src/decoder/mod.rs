@@ -207,7 +207,7 @@ enum ProtocolState {
     Initial,
     NegotiatingSsl,
     StartupDone,
-    AuthenticatingSasl,
+    AuthenticatingSasl(bool),
 }
 
 impl ProtocolState {
@@ -217,6 +217,18 @@ impl ProtocolState {
 
     pub fn expecting_ssl_response(&self) -> bool {
         matches!(self, ProtocolState::NegotiatingSsl)
+    }
+
+    pub fn authenticating_sasl(&self) -> bool {
+        matches!(self, ProtocolState::AuthenticatingSasl(_))
+    }
+
+    pub fn initial_response_sent(&self) -> bool {
+        if let ProtocolState::AuthenticatingSasl(sent) = self {
+            *sent
+        } else {
+            panic!("call this method only when authenticating sasl")
+        }
     }
 }
 

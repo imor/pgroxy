@@ -1199,7 +1199,7 @@ impl Decoder for ServerMessageDecoder {
                         AuthenticationRequest::AuthenticationGssContinue => todo!(),
                         AuthenticationRequest::AuthenticationSspi => todo!(),
                         AuthenticationRequest::AuthenticationSasl(_) => {
-                            *state = super::ProtocolState::AuthenticatingSasl
+                            *state = super::ProtocolState::AuthenticatingSasl(false)
                         }
                         AuthenticationRequest::AuthenticationSaslContinue => todo!(),
                         AuthenticationRequest::AuthenticationSaslFinal => todo!(),
@@ -1212,7 +1212,7 @@ impl Decoder for ServerMessageDecoder {
                         }
                     }
                     ServerMessage::Error(_) => {
-                        if matches!(*state, super::ProtocolState::AuthenticatingSasl) {
+                        if matches!(*state, super::ProtocolState::AuthenticatingSasl(_)) {
                             *state = super::ProtocolState::Initial
                         }
                     }

@@ -13,6 +13,7 @@ use super::{CopyDataBodyParseError, HeaderParseError, ReadCStrError, MAX_ALLOWED
 #[derive(Debug)]
 pub enum ClientMessage {
     First(FirstMessage),
+    Sasl(SaslMessage),
     Subsequent(SubsequentMessage),
 }
 
@@ -20,6 +21,7 @@ impl Display for ClientMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ClientMessage::First(msg) => write!(f, "{msg}"),
+            ClientMessage::Sasl(msg) => write!(f, "{msg}"),
             ClientMessage::Subsequent(msg) => write!(f, "{msg}"),
         }
     }
@@ -258,6 +260,171 @@ impl CancelRequestBody {
 }
 
 #[derive(Debug)]
+pub enum SaslMessage {
+    InitialResponse(InitialResponseBody),
+    Response(ResponseBody),
+}
+
+impl Display for SaslMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SaslMessage::InitialResponse(body) => write!(f, "{body}"),
+            SaslMessage::Response(body) => write!(f, "{body}"),
+        }
+    }
+}
+
+const SASL_MESSAGE_TAG: u8 = b'p';
+
+impl SaslMessage {
+    fn parse(
+        buf: &mut BytesMut,
+        initial_response_sent: bool,
+    ) -> Result<Option<SaslMessage>, SaslMessageParseError> {
+        match super::Header::parse(buf)? {
+            Some(header) => {
+                let res = match header.tag {
+                    SASL_MESSAGE_TAG => {
+                        if initial_response_sent {
+                            match ResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(SaslMessage::Response(body))),
+                                None => return Ok(None),
+                            }
+                        } else {
+                            match InitialResponseBody::parse(header.length as usize, buf)? {
+                                Some(body) => Ok(Some(SaslMessage::InitialResponse(body))),
+                                None => return Ok(None),
+                            }
+                        }
+                    }
+                    _ => {
+                        panic!("Invalid message with tag {}", header.tag);
+                    }
+                };
+                buf.advance(header.length as usize + 1);
+                res
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+enum SaslMessageParseError {
+    #[error("header parse error: {0}")]
+    Header(#[from] HeaderParseError),
+
+    #[error("sasl initial response parse error: {0}")]
+    InitialResponse(#[from] InitialResponseBodyParseError),
+
+    #[error("sasl response body parse error: {0}")]
+    Response(#[from] ResponseBodyParseError),
+}
+
+impl From<SaslMessageParseError> for std::io::Error {
+    fn from(value: SaslMessageParseError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{value}"))
+    }
+}
+
+#[derive(Debug)]
+pub struct InitialResponseBody {
+    auth_mechanism: String,
+    data: Vec<u8>,
+}
+
+impl Display for InitialResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SASLInitialResponse")?;
+        writeln!(f, "  Auth Mechanism: {}", self.auth_mechanism)?;
+        writeln!(f, "  Initial Response: {:?}", self.data)
+    }
+}
+
+#[derive(Error, Debug)]
+enum InitialResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("invalid mechanism: {0}")]
+    InvalidMechanism(#[from] ReadCStrError),
+}
+
+impl InitialResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<InitialResponseBody>, InitialResponseBodyParseError> {
+        if length <= 4 {
+            buf.advance(length + 1);
+            return Err(InitialResponseBodyParseError::LengthTooShort(length, 4));
+        }
+
+        let mut body_buf = &buf[5..];
+
+        let (auth_mechanism, end_pos) = match super::read_cstr(body_buf) {
+            Ok(res) => res,
+            Err(e) => {
+                buf.advance(length + 1);
+                return Err(e.into());
+            }
+        };
+
+        body_buf = &body_buf[end_pos..];
+        let data_length = BigEndian::read_i32(body_buf);
+        let data = if data_length > -1 {
+            body_buf = &body_buf[4..];
+            body_buf[..data_length as usize].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        Ok(Some(InitialResponseBody {
+            auth_mechanism,
+            data,
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub struct ResponseBody {
+    data: Vec<u8>,
+}
+
+impl Display for ResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SASLResponse")?;
+        writeln!(f, "  Auth Mechanism: SASLInitialResponse")?;
+        writeln!(f, "  data: {:?}", self.data)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ResponseBodyParseError {
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
+}
+
+impl ResponseBody {
+    fn parse(
+        length: usize,
+        buf: &mut BytesMut,
+    ) -> Result<Option<ResponseBody>, ResponseBodyParseError> {
+        if length <= 4 {
+            buf.advance(length + 1);
+            return Err(ResponseBodyParseError::LengthTooShort(length, 4));
+        }
+
+        let body_buf = &buf[5..];
+        let data = body_buf[..(length - 4)].to_vec();
+
+        Ok(Some(ResponseBody { data }))
+    }
+}
+
+#[derive(Debug)]
 pub enum SubsequentMessage {
     Query(QueryBody),
     CopyData(super::CopyDataBody),
@@ -280,7 +447,7 @@ impl Display for SubsequentMessage {
 }
 
 #[derive(Error, Debug)]
-enum ParseSubsequenceMessageError {
+enum SubsequentMessageParseError {
     #[error("invalid message length {0}. It should be {1}")]
     InvalidTerminateLength(usize, usize),
 
@@ -294,8 +461,8 @@ enum ParseSubsequenceMessageError {
     CopyData(#[from] CopyDataBodyParseError),
 }
 
-impl From<ParseSubsequenceMessageError> for std::io::Error {
-    fn from(value: ParseSubsequenceMessageError) -> Self {
+impl From<SubsequentMessageParseError> for std::io::Error {
+    fn from(value: SubsequentMessageParseError) -> Self {
         std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{value}"))
     }
 }
@@ -305,9 +472,7 @@ const TERMINATE_MESSAGE_TAG: u8 = b'X';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 
 impl SubsequentMessage {
-    fn parse(
-        buf: &mut BytesMut,
-    ) -> Result<Option<SubsequentMessage>, ParseSubsequenceMessageError> {
+    fn parse(buf: &mut BytesMut) -> Result<Option<SubsequentMessage>, SubsequentMessageParseError> {
         match super::Header::parse(buf)? {
             Some(header) => {
                 let res = match header.tag {
@@ -324,7 +489,7 @@ impl SubsequentMessage {
                     TERMINATE_MESSAGE_TAG => {
                         if header.length != 4 {
                             buf.advance(header.length as usize + 1);
-                            return Err(ParseSubsequenceMessageError::InvalidTerminateLength(
+                            return Err(SubsequentMessageParseError::InvalidTerminateLength(
                                 4,
                                 header.length as usize,
                             ));
@@ -409,6 +574,11 @@ impl Decoder for ClientMessageDecoder {
         if state.startup_done() {
             match SubsequentMessage::parse(buf)? {
                 Some(msg) => Ok(Some(ClientMessage::Subsequent(msg))),
+                None => Ok(None),
+            }
+        } else if state.authenticating_sasl() {
+            match SaslMessage::parse(buf, state.initial_response_sent())? {
+                Some(msg) => Ok(Some(ClientMessage::Sasl(msg))),
                 None => Ok(None),
             }
         } else {
