@@ -480,6 +480,7 @@ impl Display for ParameterStatusBody {
 enum ParameterStatusBodyParseError {
     #[error("invalid parameter name: {0}")]
     InvalidParamName(ReadCStrError),
+
     #[error("invalid parameter value: {0}")]
     InvalidParamValue(ReadCStrError),
 }
@@ -653,8 +654,10 @@ impl Display for RowDescriptionBody {
 enum RowDescriptionBodyParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid number of fields {0}")]
     InvalidNumFields(i16),
+
     #[error("invalid field {0}")]
     InvalidField(#[from] RowDescriptionFieldParseError),
 }
