@@ -280,30 +280,36 @@ impl SaslMessage {
     fn parse(
         buf: &mut BytesMut,
         initial_response_sent: bool,
-    ) -> Result<Option<SaslMessage>, SaslMessageParseError> {
-        match super::Header::parse(buf)? {
-            Some(header) => {
-                let res = match header.tag {
-                    SASL_MESSAGE_TAG => {
-                        if initial_response_sent {
-                            match ResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(SaslMessage::Response(body))),
-                                None => return Ok(None),
-                            }
-                        } else {
-                            match InitialResponseBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(SaslMessage::InitialResponse(body))),
-                                None => return Ok(None),
-                            }
+    ) -> Result<Option<(SaslMessage, usize)>, (SaslMessageParseError, usize)> {
+        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+            Some(header) => match header.tag {
+                SASL_MESSAGE_TAG => {
+                    if initial_response_sent {
+                        match ResponseBody::parse(header.length as usize, &buf[5..])
+                            .map_err(|e| (e.into(), header.length as usize + 1))?
+                        {
+                            Some(body) => Ok(Some((
+                                SaslMessage::Response(body),
+                                header.length as usize + 1,
+                            ))),
+                            None => Ok(None),
+                        }
+                    } else {
+                        match InitialResponseBody::parse(header.length as usize, &buf[5..])
+                            .map_err(|e| (e.into(), header.length as usize + 1))?
+                        {
+                            Some(body) => Ok(Some((
+                                SaslMessage::InitialResponse(body),
+                                header.length as usize + 1,
+                            ))),
+                            None => Ok(None),
                         }
                     }
-                    _ => {
-                        panic!("Invalid message with tag {}", header.tag);
-                    }
-                };
-                buf.advance(header.length as usize + 1);
-                res
-            }
+                }
+                _ => {
+                    panic!("Invalid message with tag {}", header.tag);
+                }
+            },
             None => Ok(None),
         }
     }
@@ -354,28 +360,19 @@ enum InitialResponseBodyParseError {
 impl InitialResponseBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
+        mut buf: &[u8],
     ) -> Result<Option<InitialResponseBody>, InitialResponseBodyParseError> {
         if length <= 4 {
-            buf.advance(length + 1);
             return Err(InitialResponseBodyParseError::LengthTooShort(length, 4));
         }
 
-        let mut body_buf = &buf[5..];
+        let (auth_mechanism, end_pos) = super::read_cstr(buf)?;
 
-        let (auth_mechanism, end_pos) = match super::read_cstr(body_buf) {
-            Ok(res) => res,
-            Err(e) => {
-                buf.advance(length + 1);
-                return Err(e.into());
-            }
-        };
-
-        body_buf = &body_buf[end_pos..];
-        let data_length = BigEndian::read_i32(body_buf);
+        buf = &buf[end_pos..];
+        let data_length = BigEndian::read_i32(buf);
         let data = if data_length > -1 {
-            body_buf = &body_buf[4..];
-            body_buf[..data_length as usize].to_vec()
+            buf = &buf[4..];
+            buf[..data_length as usize].to_vec()
         } else {
             Vec::new()
         };
@@ -408,17 +405,12 @@ pub enum ResponseBodyParseError {
 }
 
 impl ResponseBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<ResponseBody>, ResponseBodyParseError> {
+    fn parse(length: usize, buf: &[u8]) -> Result<Option<ResponseBody>, ResponseBodyParseError> {
         if length <= 4 {
-            buf.advance(length + 1);
             return Err(ResponseBodyParseError::LengthTooShort(length, 4));
         }
 
-        let body_buf = &buf[5..];
-        let data = body_buf[..(length - 4)].to_vec();
+        let data = buf[..(length - 4)].to_vec();
 
         Ok(Some(ResponseBody { data }))
     }
@@ -577,14 +569,21 @@ impl Decoder for ClientMessageDecoder {
                 None => Ok(None),
             }
         } else if state.authenticating_sasl() {
-            match SaslMessage::parse(buf, state.initial_response_sent())? {
-                Some(msg) => {
-                    if let SaslMessage::InitialResponse(_) = msg {
-                        *state = super::ProtocolState::AuthenticatingSasl(true);
+            match SaslMessage::parse(buf, state.initial_response_sent()) {
+                Ok(msg) => match msg {
+                    Some((msg, advance)) => {
+                        buf.advance(advance);
+                        if let SaslMessage::InitialResponse(_) = msg {
+                            *state = super::ProtocolState::AuthenticatingSasl(true);
+                        }
+                        Ok(Some(ClientMessage::Sasl(msg)))
                     }
-                    Ok(Some(ClientMessage::Sasl(msg)))
+                    None => Ok(None),
+                },
+                Err((e, advance)) => {
+                    buf.advance(advance);
+                    return Err(e.into());
                 }
-                None => Ok(None),
             }
         } else {
             match FirstMessage::parse(buf)? {
