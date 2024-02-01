@@ -407,7 +407,7 @@ enum SslResponseParseError {
 
 impl SslResponse {
     fn parse(buf: &mut BytesMut) -> Result<Option<SslResponse>, SslResponseParseError> {
-        if buf.len() < 1 {
+        if buf.is_empty() {
             return Ok(None);
         }
 
@@ -505,7 +505,8 @@ impl BackendKeyDataBody {
         if body_buf.len() < length - 4 {
             return Ok(None);
         }
-        let res = if length != 12 {
+
+        if length != 12 {
             buf.advance(length + 1);
             Err(BackendKeyDataBodyParseError::InvalidLength(length, 12))
         } else {
@@ -513,8 +514,7 @@ impl BackendKeyDataBody {
                 process_id: BigEndian::read_i32(&body_buf[..4]),
                 secret_key: BigEndian::read_i32(&body_buf[4..8]),
             }))
-        };
-        res
+        }
     }
 }
 
@@ -557,15 +557,15 @@ impl ReadyForQueryBody {
         if body_buf.len() < length - 4 {
             return Ok(None);
         }
-        let res = if length != 5 {
+
+        if length != 5 {
             buf.advance(length + 1);
             Err(ReadyForQueryBodyParseError::InvalidLength(length, 5))
         } else {
             Ok(Some(ReadyForQueryBody {
                 transaction_status: body_buf[0],
             }))
-        };
-        res
+        }
     }
 }
 
@@ -1097,7 +1097,7 @@ impl ErrorResponseBody {
 
         let mut fields = Vec::new();
         loop {
-            let (field, end_pos) = match ErrorField::parse(&body_buf)? {
+            let (field, end_pos) = match ErrorField::parse(body_buf)? {
                 Some(res) => res,
                 None => return Ok(None),
             };

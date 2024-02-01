@@ -179,11 +179,11 @@ impl From<ReadCStrError> for std::io::Error {
         match value {
             ReadCStrError::NotNullTerminated => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("c string is not null terminated"),
+                "c string is not null terminated".to_string(),
             ),
             ReadCStrError::NotUtf8Formatted => std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("c string is utf8 formatted"),
+                "c string is utf8 formatted".to_string(),
             ),
         }
     }
