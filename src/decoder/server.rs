@@ -169,7 +169,7 @@ impl ServerMessage {
                     Ok(Some((ServerMessage::BackendKeyData(body), header.skip())))
                 }
                 READY_FOR_QUERY_MESSAGE_TAG => {
-                    let body = ReadyForQueryBody::parse(header.length as usize, buf)
+                    let body = ReadyForQueryBody::parse(header.length as usize, &buf[5..])
                         .map_err(|e| (e.into(), header.skip()))?;
                     Ok(Some((ServerMessage::ReadyForQuery(body), header.skip())))
                 }
@@ -189,7 +189,7 @@ impl ServerMessage {
                     Ok(Some((ServerMessage::DataRow(body), header.skip())))
                 }
                 COPY_DATA_MESSAGE_TAG => {
-                    let body = CopyDataBody::parse(header.length as usize, buf);
+                    let body = CopyDataBody::parse(header.length as usize, &buf[5..]);
                     Ok(Some((ServerMessage::CopyData(body), header.skip())))
                 }
                 COPY_IN_MESSAGE_TAG => {
