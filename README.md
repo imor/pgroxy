@@ -4,7 +4,7 @@ pgroxy sits between a client and a postgres server. It copies data between the c
 
 ```
 +--------+    +--------+    +----------+
-| client | ⇄ | pgroxy | ⇄ | postgres |
+| client | ⇄  | pgroxy |  ⇄ | postgres |
 +--------+    +--------+    +----------+
                   ↓
               +--------+
