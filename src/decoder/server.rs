@@ -238,7 +238,7 @@ pub enum AuthenticationRequest {
     AuthenticationGss,
     AuthenticationGssContinue,
     AuthenticationSspi,
-    AuthenticationSasl,
+    AuthenticationSasl(SaslBody),
     AuthenticationSaslContinue,
     AuthenticationSaslFinal,
 }
@@ -246,6 +246,10 @@ pub enum AuthenticationRequest {
 impl Display for AuthenticationRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
+        if let AuthenticationRequest::AuthenticationSasl(body) = self {
+            writeln!(f, "{body}")?;
+            return Ok(());
+        }
         let typ = match self {
             AuthenticationRequest::AuthenticationOk => "AuthenticationOk",
             AuthenticationRequest::AuthenticationKerberosV5 => "AuthenticationKerberosV5",
@@ -256,7 +260,7 @@ impl Display for AuthenticationRequest {
             AuthenticationRequest::AuthenticationGss => "AuthenticationGSS",
             AuthenticationRequest::AuthenticationGssContinue => "AuthenticationGSSContinue",
             AuthenticationRequest::AuthenticationSspi => "AuthenticationSSPI",
-            AuthenticationRequest::AuthenticationSasl => "AuthenticationSASL",
+            AuthenticationRequest::AuthenticationSasl(_) => "AuthenticationSASL",
             AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
             AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
         };
@@ -268,10 +272,15 @@ impl Display for AuthenticationRequest {
 enum AuthenticationRequestParseError {
     #[error("invalid message length {0}. It should be {1}")]
     InvalidLength(usize, usize),
+
     #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid type {0}")]
     InvalidType(i32),
+
+    #[error("sasl body parse error: {0}")]
+    Sasl(#[from] SaslBodyParseError),
 }
 
 const AUTHETICATION_OK_TYPE: i32 = 0;
@@ -359,7 +368,10 @@ impl AuthenticationRequest {
                     buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationSasl))
+                    match SaslBody::parse(length, buf)? {
+                        Some(body) => Ok(Some(AuthenticationRequest::AuthenticationSasl(body))),
+                        None => Ok(None),
+                    }
                 }
             }
             AUTHETICATION_SASL_CONTINUE_TYPE => {
@@ -383,6 +395,57 @@ impl AuthenticationRequest {
                 Err(AuthenticationRequestParseError::InvalidType(typ))
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct SaslBody {
+    auth_mechanisms: Vec<String>,
+}
+
+impl Display for SaslBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: AuthenticationSASL")?;
+        for mechanism in &self.auth_mechanisms {
+            writeln!(f, "  Auth Mechanism: {mechanism}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum SaslBodyParseError {
+    #[error("invalid mechanism: {0}")]
+    InvalidMechanism(#[from] ReadCStrError),
+
+    #[error("sasl message is not null terminated")]
+    NotNullTerminated,
+}
+
+impl SaslBody {
+    fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<SaslBody>, SaslBodyParseError> {
+        let mut mechanism_start = 9;
+        let mut auth_mechanisms = Vec::new();
+        loop {
+            let (mechanism, end_pos) = match super::read_cstr(&buf[mechanism_start..]) {
+                Ok(res) => res,
+                Err(e) => {
+                    buf.advance(length);
+                    return Err(e.into());
+                }
+            };
+            auth_mechanisms.push(mechanism);
+            mechanism_start += end_pos;
+            if mechanism_start >= length - 1 {
+                if buf[length - 1] != 0 {
+                    buf.advance(length);
+                    return Err(SaslBodyParseError::NotNullTerminated);
+                }
+                break;
+            }
+        }
+        Ok(Some(SaslBody { auth_mechanisms }))
     }
 }
 
@@ -1125,9 +1188,22 @@ impl Decoder for ServerMessageDecoder {
         match ServerMessage::parse(buf, state.expecting_ssl_response())? {
             Some(msg) => {
                 match msg {
-                    ServerMessage::Authentication(AuthenticationRequest::AuthenticationOk) => {
-                        *state = super::ProtocolState::AuthenticationOk
-                    }
+                    ServerMessage::Authentication(ref auth_req) => match auth_req {
+                        AuthenticationRequest::AuthenticationOk => {
+                            *state = super::ProtocolState::AuthenticationOk
+                        }
+                        AuthenticationRequest::AuthenticationKerberosV5 => todo!(),
+                        AuthenticationRequest::AuthenticationCleartextPassword => todo!(),
+                        AuthenticationRequest::AuthenticationMd5Password => todo!(),
+                        AuthenticationRequest::AuthenticationGss => todo!(),
+                        AuthenticationRequest::AuthenticationGssContinue => todo!(),
+                        AuthenticationRequest::AuthenticationSspi => todo!(),
+                        AuthenticationRequest::AuthenticationSasl(_) => {
+                            *state = super::ProtocolState::AuthenticatingSasl
+                        }
+                        AuthenticationRequest::AuthenticationSaslContinue => todo!(),
+                        AuthenticationRequest::AuthenticationSaslFinal => todo!(),
+                    },
                     ServerMessage::Ssl(SslResponse { accepted }) => {
                         if accepted {
                             *state = super::ProtocolState::SslAccepted

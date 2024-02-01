@@ -414,11 +414,8 @@ impl Decoder for ClientMessageDecoder {
         } else {
             match FirstMessage::parse(buf)? {
                 Some(msg) => {
-                    match msg {
-                        FirstMessage::SslRequest => {
-                            *state = super::ProtocolState::SslRequestSent;
-                        }
-                        _ => {}
+                    if let FirstMessage::SslRequest = msg {
+                        *state = super::ProtocolState::SslRequestSent;
                     }
                     Ok(Some(ClientMessage::First(msg)))
                 }

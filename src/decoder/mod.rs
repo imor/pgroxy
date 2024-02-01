@@ -208,6 +208,7 @@ enum ProtocolState {
     SslRequestSent,
     SslAccepted,
     SslRejected,
+    AuthenticatingSasl,
     AuthenticationOk,
 }
 
@@ -218,6 +219,7 @@ impl ProtocolState {
             ProtocolState::SslRequestSent => false,
             ProtocolState::SslAccepted => true,
             ProtocolState::SslRejected => false,
+            ProtocolState::AuthenticatingSasl => true,
             ProtocolState::AuthenticationOk => true,
         }
     }
