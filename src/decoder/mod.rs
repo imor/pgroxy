@@ -11,11 +11,6 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use thiserror::Error;
 
-use self::{
-    client::{FirstMessage, SubsequentMessage},
-    server::{ServerMessage, SslResponse},
-};
-
 const MAX_ALLOWED_MESSAGE_LENGTH: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
@@ -207,151 +202,36 @@ fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrError> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum ProtocolState {
     Initial,
-    Startup(StartupState),
-    ReadyForQuery,
-    SimpleQuery,
-    //TODO: uncomment & use
-    // ExtendedQuery,
-    // FunctionCall,
-    Copy(CopyMode),
+    SslRequestSent,
+    SslAccepted,
+    SslRejected,
+    AuthenticationOk,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum StartupState {
-    Plaintext,
-    Ssl,
-    GssApi,
-    Cancel,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum CopyMode {
-    //TODO: uncomment & use
-    // In,
-    // Out,
-    Both,
-}
-
-struct CurrentProtocolState {
-    state_stack: Vec<ProtocolState>,
-}
-
-impl CurrentProtocolState {
-    pub fn first_message(&mut self, message: &FirstMessage) {
-        debug_assert!(matches!(self.peek(), ProtocolState::Initial));
-
-        let state = match message {
-            FirstMessage::StartupMessage(_) => ProtocolState::Startup(StartupState::Plaintext),
-            FirstMessage::CancelRequest(_) => ProtocolState::Startup(StartupState::Cancel),
-            FirstMessage::SslRequest => ProtocolState::Startup(StartupState::Ssl),
-            FirstMessage::GssEncRequest => ProtocolState::Startup(StartupState::GssApi),
-        };
-        self.state_stack.push(state);
-    }
-
-    pub fn subsequent_message(&mut self, msg: &SubsequentMessage) {
-        match msg {
-            SubsequentMessage::Query(_) => self.state_stack.push(ProtocolState::SimpleQuery),
-            SubsequentMessage::CopyData(_) => {}
-            SubsequentMessage::Terminate => {
-                self.state_stack.pop();
-            }
-            SubsequentMessage::Unknown(_) => {
-                //No state transition for unknown message type
-            }
-        }
-    }
-
-    pub fn server_message(&mut self, msg: &ServerMessage) {
-        match msg {
-            ServerMessage::Authentication(req) => {
-                debug_assert!(matches!(self.peek(), ProtocolState::Startup(_)));
-                match req {
-                    server::AuthenticationRequest::AuthenticationOk => {}
-                    server::AuthenticationRequest::AuthenticationKerberosV5 => {}
-                    server::AuthenticationRequest::AuthenticationCleartextPassword => {}
-                    server::AuthenticationRequest::AuthenticationMd5Password => {}
-                    server::AuthenticationRequest::AuthenticationGss => {}
-                    server::AuthenticationRequest::AuthenticationGssContinue => {}
-                    server::AuthenticationRequest::AuthenticationSspi => {}
-                    server::AuthenticationRequest::AuthenticationSasl => {}
-                    server::AuthenticationRequest::AuthenticationSaslContinue => {}
-                    server::AuthenticationRequest::AuthenticationSaslFinal => {}
-                }
-            }
-            ServerMessage::Ssl(SslResponse { accepted }) => {
-                if *accepted {
-                    self.state_stack.push(ProtocolState::ReadyForQuery);
-                } else {
-                    let old_state = self.state_stack.pop();
-                    debug_assert!(matches!(
-                        old_state,
-                        Some(ProtocolState::Startup(StartupState::Ssl))
-                    ))
-                }
-            }
-            ServerMessage::ParameterStatus(_) => {}
-            ServerMessage::BackendKeyData(_) => {}
-            ServerMessage::ReadyForQuery(_) => {
-                if matches!(self.peek(), ProtocolState::Startup(_)) {
-                    self.state_stack.push(ProtocolState::ReadyForQuery);
-                } else {
-                    self.state_stack.pop();
-                }
-            }
-            ServerMessage::RowDescription(_) => {}
-            ServerMessage::CommandCompelte(_) => {}
-            ServerMessage::DataRow(_) => {}
-            ServerMessage::CopyData(_) => {}
-            ServerMessage::CopyIn(_) => {}
-            ServerMessage::CopyOut(_) => {}
-            ServerMessage::CopyBoth(_) => {
-                self.state_stack.push(ProtocolState::Copy(CopyMode::Both));
-            }
-            ServerMessage::CopyDone(_) => {}
-            ServerMessage::Error(_) => {}
-            ServerMessage::Unknown(_) => {}
-        }
-    }
-
-    pub fn startup_done(&mut self) -> bool {
-        match self.peek() {
+impl ProtocolState {
+    pub fn startup_done(&self) -> bool {
+        match self {
             ProtocolState::Initial => false,
-            ProtocolState::Startup(_) => false,
-            ProtocolState::ReadyForQuery => true,
-            ProtocolState::SimpleQuery => true,
-            //TODO: uncomment & use
-            // ProtocolState::ExtendedQuery => true,
-            // ProtocolState::FunctionCall => true,
-            ProtocolState::Copy(_) => true,
+            ProtocolState::SslRequestSent => false,
+            ProtocolState::SslAccepted => true,
+            ProtocolState::SslRejected => false,
+            ProtocolState::AuthenticationOk => true,
         }
     }
 
-    pub fn expecting_ssl_response(&mut self) -> bool {
-        matches!(self.peek(), ProtocolState::Startup(StartupState::Ssl))
-    }
-
-    fn peek(&mut self) -> ProtocolState {
-        if self.state_stack.is_empty() {
-            panic!("empty state stack");
-        }
-        self.state_stack[self.state_stack.len() - 1]
+    pub fn expecting_ssl_response(&self) -> bool {
+        matches!(self, ProtocolState::SslRequestSent)
     }
 }
 
 pub fn create_decoders() -> (client::ClientMessageDecoder, server::ServerMessageDecoder) {
-    let current_protocol_state = CurrentProtocolState {
-        state_stack: vec![ProtocolState::Initial],
-    };
-    let current_protocol_state = Arc::new(Mutex::new(current_protocol_state));
+    let protocol_state = Arc::new(Mutex::new(ProtocolState::Initial));
     let client_msg_decoder = client::ClientMessageDecoder {
-        current_protocol_state: Arc::clone(&current_protocol_state),
+        protocol_state: Arc::clone(&protocol_state),
     };
-    let server_msg_decoder = server::ServerMessageDecoder {
-        current_protocol_state,
-    };
+    let server_msg_decoder = server::ServerMessageDecoder { protocol_state };
     (client_msg_decoder, server_msg_decoder)
 }

@@ -394,7 +394,7 @@ impl QueryBody {
 }
 
 pub struct ClientMessageDecoder {
-    pub(super) current_protocol_state: Arc<Mutex<super::CurrentProtocolState>>,
+    pub(super) protocol_state: Arc<Mutex<super::ProtocolState>>,
 }
 
 impl Decoder for ClientMessageDecoder {
@@ -403,21 +403,23 @@ impl Decoder for ClientMessageDecoder {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut state = self
-            .current_protocol_state
+            .protocol_state
             .lock()
             .expect("failed to lock protocol_state");
         if state.startup_done() {
             match SubsequentMessage::parse(buf)? {
-                Some(msg) => {
-                    state.subsequent_message(&msg);
-                    Ok(Some(ClientMessage::Subsequent(msg)))
-                }
+                Some(msg) => Ok(Some(ClientMessage::Subsequent(msg))),
                 None => Ok(None),
             }
         } else {
             match FirstMessage::parse(buf)? {
                 Some(msg) => {
-                    state.first_message(&msg);
+                    match msg {
+                        FirstMessage::SslRequest => {
+                            *state = super::ProtocolState::SslRequestSent;
+                        }
+                        _ => {}
+                    }
                     Ok(Some(ClientMessage::First(msg)))
                 }
                 None => Ok(None),
