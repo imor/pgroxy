@@ -578,7 +578,12 @@ impl Decoder for ClientMessageDecoder {
             }
         } else if state.authenticating_sasl() {
             match SaslMessage::parse(buf, state.initial_response_sent())? {
-                Some(msg) => Ok(Some(ClientMessage::Sasl(msg))),
+                Some(msg) => {
+                    if let SaslMessage::InitialResponse(_) = msg {
+                        *state = super::ProtocolState::AuthenticatingSasl(true);
+                    }
+                    Ok(Some(ClientMessage::Sasl(msg)))
+                }
                 None => Ok(None),
             }
         } else {

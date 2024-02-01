@@ -1192,17 +1192,17 @@ impl Decoder for ServerMessageDecoder {
                         AuthenticationRequest::AuthenticationOk => {
                             *state = super::ProtocolState::StartupDone
                         }
-                        AuthenticationRequest::AuthenticationKerberosV5 => todo!(),
-                        AuthenticationRequest::AuthenticationCleartextPassword => todo!(),
-                        AuthenticationRequest::AuthenticationMd5Password => todo!(),
-                        AuthenticationRequest::AuthenticationGss => todo!(),
-                        AuthenticationRequest::AuthenticationGssContinue => todo!(),
-                        AuthenticationRequest::AuthenticationSspi => todo!(),
+                        AuthenticationRequest::AuthenticationKerberosV5 => {}
+                        AuthenticationRequest::AuthenticationCleartextPassword => {}
+                        AuthenticationRequest::AuthenticationMd5Password => {}
+                        AuthenticationRequest::AuthenticationGss => {}
+                        AuthenticationRequest::AuthenticationGssContinue => {}
+                        AuthenticationRequest::AuthenticationSspi => {}
                         AuthenticationRequest::AuthenticationSasl(_) => {
                             *state = super::ProtocolState::AuthenticatingSasl(false)
                         }
-                        AuthenticationRequest::AuthenticationSaslContinue => todo!(),
-                        AuthenticationRequest::AuthenticationSaslFinal => todo!(),
+                        AuthenticationRequest::AuthenticationSaslContinue => {}
+                        AuthenticationRequest::AuthenticationSaslFinal => {}
                     },
                     ServerMessage::Ssl(SslResponse { accepted }) => {
                         if accepted {
