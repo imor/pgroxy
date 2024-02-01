@@ -245,7 +245,6 @@ pub enum AuthenticationRequest {
 
 impl Display for AuthenticationRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f)?;
         if let AuthenticationRequest::AuthenticationSasl(body) = self {
             writeln!(f, "{body}")?;
             return Ok(());
@@ -264,6 +263,7 @@ impl Display for AuthenticationRequest {
             AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
             AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
         };
+        writeln!(f)?;
         writeln!(f, "  Type: {typ}")
     }
 }
