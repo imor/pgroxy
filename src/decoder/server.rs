@@ -9,8 +9,7 @@ use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use super::{
-    read_cstr, CopyDataBody, CopyDataBodyParseError, CopyDoneBody, CopyDoneBodyParseError,
-    HeaderParseError, ReadCStrError,
+    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, HeaderParseError, ReadCStrError,
 };
 
 #[derive(Debug)]
@@ -79,9 +78,6 @@ enum ServerMessageParseError {
 
     #[error("invalid data row body message: {0}")]
     DataRow(#[from] DataRowBodyParseError),
-
-    #[error("invalid copy data message: {0}")]
-    CopyData(#[from] CopyDataBodyParseError),
 
     #[error("invalid copy in message: {0}")]
     CopyIn(#[from] CopyInResponseBodyParseError),
@@ -179,10 +175,8 @@ impl ServerMessage {
                             }
                         }
                         COPY_DATA_MESSAGE_TAG => {
-                            match CopyDataBody::parse(header.length as usize, buf)? {
-                                Some(body) => Ok(Some(Self::CopyData(body))),
-                                None => return Ok(None),
-                            }
+                            let body = CopyDataBody::parse(header.length as usize, buf);
+                            Ok(Some(Self::CopyData(body)))
                         }
                         COPY_IN_MESSAGE_TAG => {
                             match CopyInResponseBody::parse(header.length as usize, buf)? {
@@ -219,7 +213,7 @@ impl ServerMessage {
                             None => return Ok(None),
                         },
                     };
-                    buf.advance(header.length as usize + 1);
+                    buf.advance(header.skip());
                     res
                 }
                 None => Ok(None),

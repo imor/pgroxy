@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{CopyDataBodyParseError, HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
+use super::{HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -286,22 +286,18 @@ impl SaslMessage {
                 SASL_MESSAGE_TAG => {
                     if initial_response_sent {
                         match ResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.length as usize + 1))?
+                            .map_err(|e| (e.into(), header.skip()))?
                         {
-                            Some(body) => Ok(Some((
-                                SaslMessage::Response(body),
-                                header.length as usize + 1,
-                            ))),
+                            Some(body) => Ok(Some((SaslMessage::Response(body), header.skip()))),
                             None => Ok(None),
                         }
                     } else {
                         match InitialResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.length as usize + 1))?
+                            .map_err(|e| (e.into(), header.skip()))?
                         {
-                            Some(body) => Ok(Some((
-                                SaslMessage::InitialResponse(body),
-                                header.length as usize + 1,
-                            ))),
+                            Some(body) => {
+                                Ok(Some((SaslMessage::InitialResponse(body), header.skip())))
+                            }
                             None => Ok(None),
                         }
                     }
@@ -448,9 +444,6 @@ enum SubsequentMessageParseError {
 
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
-
-    #[error("copy data body parse error: {0}")]
-    CopyData(#[from] CopyDataBodyParseError),
 }
 
 impl From<SubsequentMessageParseError> for std::io::Error {
@@ -464,38 +457,40 @@ const TERMINATE_MESSAGE_TAG: u8 = b'X';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 
 impl SubsequentMessage {
-    fn parse(buf: &mut BytesMut) -> Result<Option<SubsequentMessage>, SubsequentMessageParseError> {
-        match super::Header::parse(buf)? {
-            Some(header) => {
-                let res = match header.tag {
-                    QUERY_MESSAGE_TAG => match QueryBody::parse(header.length as usize, buf)? {
-                        Some(query_body) => Ok(Some(SubsequentMessage::Query(query_body))),
-                        None => return Ok(None),
-                    },
-                    COPY_DATA_MESSAGE_TAG => {
-                        match super::CopyDataBody::parse(header.length as usize, buf)? {
-                            Some(body) => Ok(Some(SubsequentMessage::CopyData(body))),
-                            None => return Ok(None),
+    fn parse(
+        buf: &mut BytesMut,
+    ) -> Result<Option<(SubsequentMessage, usize)>, (SubsequentMessageParseError, usize)> {
+        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+            Some(header) => match header.tag {
+                QUERY_MESSAGE_TAG => {
+                    match QueryBody::parse(&buf[5..]).map_err(|e| (e.into(), header.skip()))? {
+                        Some(query_body) => {
+                            Ok(Some((SubsequentMessage::Query(query_body), header.skip())))
                         }
+                        None => Ok(None),
                     }
-                    TERMINATE_MESSAGE_TAG => {
-                        if header.length != 4 {
-                            buf.advance(header.length as usize + 1);
-                            return Err(SubsequentMessageParseError::InvalidTerminateLength(
+                }
+                COPY_DATA_MESSAGE_TAG => {
+                    let body = super::CopyDataBody::parse(header.length as usize, &buf[5..]);
+                    Ok(Some((SubsequentMessage::CopyData(body), header.skip())))
+                }
+                TERMINATE_MESSAGE_TAG => {
+                    if header.length != 4 {
+                        return Err((
+                            SubsequentMessageParseError::InvalidTerminateLength(
                                 4,
                                 header.length as usize,
-                            ));
-                        }
-                        Ok(Some(SubsequentMessage::Terminate))
+                            ),
+                            header.skip(),
+                        ));
                     }
-                    _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
-                        Some(body) => Ok(Some(SubsequentMessage::Unknown(body))),
-                        None => return Ok(None),
-                    },
-                };
-                buf.advance(header.length as usize + 1);
-                res
-            }
+                    Ok(Some((SubsequentMessage::Terminate, header.skip())))
+                }
+                _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
+                    Some(body) => Ok(Some((SubsequentMessage::Unknown(body), header.skip()))),
+                    None => Ok(None),
+                },
+            },
             None => Ok(None),
         }
     }
@@ -516,9 +511,6 @@ impl Display for QueryBody {
 
 #[derive(Error, Debug)]
 enum QueryBodyParseError {
-    #[error("invalid message length {0}. It can't be less than {1}")]
-    LengthTooShort(usize, usize),
-
     #[error("invalid query: {0}")]
     InvalidQuery(#[from] ReadCStrError),
 
@@ -527,22 +519,10 @@ enum QueryBodyParseError {
 }
 
 impl QueryBody {
-    fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<QueryBody>, QueryBodyParseError> {
-        if length <= 4 {
-            buf.advance(length + 1);
-            return Err(QueryBodyParseError::LengthTooShort(length, 4));
-        }
+    fn parse(buf: &[u8]) -> Result<Option<QueryBody>, QueryBodyParseError> {
+        let (query, end_pos) = super::read_cstr(buf)?;
 
-        let body_buf = &buf[5..];
-
-        let (query, end_pos) = match super::read_cstr(body_buf) {
-            Ok(res) => res,
-            Err(e) => {
-                buf.advance(length + 1);
-                return Err(e.into());
-            }
-        };
-        if end_pos != body_buf.len() {
+        if end_pos != buf.len() {
             return Err(QueryBodyParseError::TrailingBytes);
         }
 
@@ -564,15 +544,24 @@ impl Decoder for ClientMessageDecoder {
             .lock()
             .expect("failed to lock protocol_state");
         if state.startup_done() {
-            match SubsequentMessage::parse(buf)? {
-                Some(msg) => Ok(Some(ClientMessage::Subsequent(msg))),
-                None => Ok(None),
+            match SubsequentMessage::parse(buf) {
+                Ok(msg) => match msg {
+                    Some((msg, skip)) => {
+                        buf.advance(skip);
+                        Ok(Some(ClientMessage::Subsequent(msg)))
+                    }
+                    None => Ok(None),
+                },
+                Err((e, skip)) => {
+                    buf.advance(skip);
+                    Err(e.into())
+                }
             }
         } else if state.authenticating_sasl() {
             match SaslMessage::parse(buf, state.initial_response_sent()) {
                 Ok(msg) => match msg {
-                    Some((msg, advance)) => {
-                        buf.advance(advance);
+                    Some((msg, skip)) => {
+                        buf.advance(skip);
                         if let SaslMessage::InitialResponse(_) = msg {
                             *state = super::ProtocolState::AuthenticatingSasl(true);
                         }
@@ -580,8 +569,8 @@ impl Decoder for ClientMessageDecoder {
                     }
                     None => Ok(None),
                 },
-                Err((e, advance)) => {
-                    buf.advance(advance);
+                Err((e, skip)) => {
+                    buf.advance(skip);
                     return Err(e.into());
                 }
             }

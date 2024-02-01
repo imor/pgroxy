@@ -65,6 +65,10 @@ impl Header {
             length: length as i32,
         }))
     }
+
+    fn skip(&self) -> usize {
+        self.length as usize + 1
+    }
 }
 
 #[derive(Debug)]
@@ -80,27 +84,10 @@ impl Display for CopyDataBody {
     }
 }
 
-#[derive(Error, Debug)]
-enum CopyDataBodyParseError {
-    #[error("invalid message length {0}. It can't be less than {1}")]
-    LengthTooShort(usize, usize),
-}
-
 impl CopyDataBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CopyDataBody>, CopyDataBodyParseError> {
-        let body_buf = &buf[5..];
-        if length < 4 {
-            buf.advance(length + 1);
-            return Err(CopyDataBodyParseError::LengthTooShort(length, 4));
-        }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        let data = body_buf[..length - 4].to_vec();
-        Ok(Some(CopyDataBody { data }))
+    fn parse(length: usize, buf: &[u8]) -> CopyDataBody {
+        let data = buf[..length - 4].to_vec();
+        CopyDataBody { data }
     }
 }
 
@@ -155,9 +142,6 @@ impl Display for UnknownMessageBody {
 impl UnknownMessageBody {
     fn parse(buf: &[u8], header: Header) -> Option<UnknownMessageBody> {
         let data_length = header.length as usize - 4;
-        if buf.len() < data_length {
-            return None;
-        }
 
         Some(UnknownMessageBody {
             header,
