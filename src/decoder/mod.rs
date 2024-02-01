@@ -28,6 +28,7 @@ pub struct Header {
 enum HeaderParseError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooShort(usize, usize),
+
     #[error("invalid message length {0}. It can't be greater than {1}")]
     LengthTooLong(usize, usize),
 }
@@ -58,6 +59,10 @@ impl Header {
                 length,
                 MAX_ALLOWED_MESSAGE_LENGTH,
             ));
+        }
+
+        if buf.len() < length + 1 {
+            return Ok(None);
         }
 
         Ok(Some(Header {

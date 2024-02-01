@@ -364,26 +364,31 @@ enum QueryBodyParseError {
 
     #[error("invalid query: {0}")]
     InvalidQuery(#[from] ReadCStrError),
+
+    #[error("trailing bytes after query string")]
+    TrailingBytes,
 }
 
 impl QueryBody {
     fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<QueryBody>, QueryBodyParseError> {
-        let body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
         if length <= 4 {
             buf.advance(length + 1);
             return Err(QueryBodyParseError::LengthTooShort(length, 4));
         }
 
-        let (query, _) = match super::read_cstr(body_buf) {
+        let body_buf = &buf[5..];
+
+        let (query, end_pos) = match super::read_cstr(body_buf) {
             Ok(res) => res,
             Err(e) => {
                 buf.advance(length + 1);
                 return Err(e.into());
             }
         };
+        if end_pos != body_buf.len() {
+            return Err(QueryBodyParseError::TrailingBytes);
+        }
+
         Ok(Some(QueryBody { query }))
     }
 }
