@@ -1190,7 +1190,7 @@ impl Decoder for ServerMessageDecoder {
                 match msg {
                     ServerMessage::Authentication(ref auth_req) => match auth_req {
                         AuthenticationRequest::AuthenticationOk => {
-                            *state = super::ProtocolState::AuthenticationOk
+                            *state = super::ProtocolState::StartupDone
                         }
                         AuthenticationRequest::AuthenticationKerberosV5 => todo!(),
                         AuthenticationRequest::AuthenticationCleartextPassword => todo!(),
@@ -1206,9 +1206,14 @@ impl Decoder for ServerMessageDecoder {
                     },
                     ServerMessage::Ssl(SslResponse { accepted }) => {
                         if accepted {
-                            *state = super::ProtocolState::SslAccepted
+                            *state = super::ProtocolState::StartupDone
                         } else {
-                            *state = super::ProtocolState::SslRejected
+                            *state = super::ProtocolState::Initial
+                        }
+                    }
+                    ServerMessage::Error(_) => {
+                        if matches!(*state, super::ProtocolState::AuthenticatingSasl) {
+                            *state = super::ProtocolState::Initial
                         }
                     }
                     _ => {}

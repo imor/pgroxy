@@ -205,27 +205,18 @@ fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrError> {
 #[derive(Clone, Copy)]
 enum ProtocolState {
     Initial,
-    SslRequestSent,
-    SslAccepted,
-    SslRejected,
+    NegotiatingSsl,
+    StartupDone,
     AuthenticatingSasl,
-    AuthenticationOk,
 }
 
 impl ProtocolState {
     pub fn startup_done(&self) -> bool {
-        match self {
-            ProtocolState::Initial => false,
-            ProtocolState::SslRequestSent => false,
-            ProtocolState::SslAccepted => true,
-            ProtocolState::SslRejected => false,
-            ProtocolState::AuthenticatingSasl => true,
-            ProtocolState::AuthenticationOk => true,
-        }
+        matches!(self, ProtocolState::StartupDone)
     }
 
     pub fn expecting_ssl_response(&self) -> bool {
-        matches!(self, ProtocolState::SslRequestSent)
+        matches!(self, ProtocolState::NegotiatingSsl)
     }
 }
 
