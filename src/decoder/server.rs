@@ -9,7 +9,8 @@ use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use super::{
-    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, HeaderParseError, ReadCStrError,
+    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, HeaderParseError,
+    ReadCStrError,
 };
 
 #[derive(Debug)]
@@ -129,7 +130,7 @@ impl ServerMessage {
                 None => Ok(None),
             }
         } else {
-            match Self::parse_message_with_header(buf) {
+            match Self::parse_header_and_message(buf) {
                 Ok(msg) => match msg {
                     Some((msg, skip)) => {
                         buf.advance(skip);
@@ -145,84 +146,88 @@ impl ServerMessage {
         }
     }
 
-    fn parse_message_with_header(
+    fn parse_header_and_message(
         buf: &mut BytesMut,
     ) -> Result<Option<(ServerMessage, usize)>, (ServerMessageParseError, usize)> {
         match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
-            Some(header) => match header.tag {
-                AUTHENTICATION_MESSAGE_TAG => {
-                    let auth_req = AuthenticationRequest::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((
-                        ServerMessage::Authentication(auth_req),
-                        header.skip(),
-                    )))
-                }
-                PARAM_STATUS_MESSAGE_TAG => {
-                    let body = ParameterStatusBody::parse(&buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::ParameterStatus(body), header.skip())))
-                }
-                BACKEND_KEY_DATA_MESSAGE_TAG => {
-                    let body = BackendKeyDataBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::BackendKeyData(body), header.skip())))
-                }
-                READY_FOR_QUERY_MESSAGE_TAG => {
-                    let body = ReadyForQueryBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::ReadyForQuery(body), header.skip())))
-                }
-                ROW_DESCRIPTION_MESSAGE_TAG => {
-                    let body = RowDescriptionBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::RowDescription(body), header.skip())))
-                }
-                COMMAND_COMPLETE_MESSAGE_TAG => {
-                    let body = CommandCompleteBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::CommandComplete(body), header.skip())))
-                }
-                DATA_ROW_MESSAGE_TAG => {
-                    let body = DataRowBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::DataRow(body), header.skip())))
-                }
-                COPY_DATA_MESSAGE_TAG => {
-                    let body = CopyDataBody::parse(header.length as usize, &buf[5..]);
-                    Ok(Some((ServerMessage::CopyData(body), header.skip())))
-                }
-                COPY_IN_MESSAGE_TAG => {
-                    let body = CopyInResponseBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::CopyIn(body), header.skip())))
-                }
-                COPY_OUT_MESSAGE_TAG => {
-                    let body = CopyOutResponseBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::CopyOut(body), header.skip())))
-                }
-                COPY_BOTH_MESSAGE_TAG => {
-                    let body = CopyBothResponseBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::CopyBoth(body), header.skip())))
-                }
-                COPY_DONE_MESSAGE_TAG => {
-                    let body = CopyDoneBody::parse(header.length as usize)
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::CopyDone(body), header.skip())))
-                }
-                ERROR_RESPONSE_MESSAGE_TAG => {
-                    let body = ErrorResponseBody::parse(header.length as usize, &buf[5..])
-                        .map_err(|e| (e.into(), header.skip()))?;
-                    Ok(Some((ServerMessage::Error(body), header.skip())))
-                }
-                _ => {
-                    let body = super::UnknownMessageBody::parse(&buf[5..], header);
-                    Ok(Some((ServerMessage::Unknown(body), header.skip())))
-                }
-            },
+            Some(header) => Ok(Some(Self::parse_message(header, buf)?)),
             None => Ok(None),
+        }
+    }
+
+    fn parse_message(
+        header: Header,
+        buf: &[u8],
+    ) -> Result<(ServerMessage, usize), (ServerMessageParseError, usize)> {
+        match header.tag {
+            AUTHENTICATION_MESSAGE_TAG => {
+                let auth_req = AuthenticationRequest::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::Authentication(auth_req), header.skip()))
+            }
+            PARAM_STATUS_MESSAGE_TAG => {
+                let body =
+                    ParameterStatusBody::parse(&buf[5..]).map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::ParameterStatus(body), header.skip()))
+            }
+            BACKEND_KEY_DATA_MESSAGE_TAG => {
+                let body = BackendKeyDataBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::BackendKeyData(body), header.skip()))
+            }
+            READY_FOR_QUERY_MESSAGE_TAG => {
+                let body = ReadyForQueryBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::ReadyForQuery(body), header.skip()))
+            }
+            ROW_DESCRIPTION_MESSAGE_TAG => {
+                let body = RowDescriptionBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::RowDescription(body), header.skip()))
+            }
+            COMMAND_COMPLETE_MESSAGE_TAG => {
+                let body = CommandCompleteBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::CommandComplete(body), header.skip()))
+            }
+            DATA_ROW_MESSAGE_TAG => {
+                let body = DataRowBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::DataRow(body), header.skip()))
+            }
+            COPY_DATA_MESSAGE_TAG => {
+                let body = CopyDataBody::parse(header.length as usize, &buf[5..]);
+                Ok((ServerMessage::CopyData(body), header.skip()))
+            }
+            COPY_IN_MESSAGE_TAG => {
+                let body = CopyInResponseBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::CopyIn(body), header.skip()))
+            }
+            COPY_OUT_MESSAGE_TAG => {
+                let body = CopyOutResponseBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::CopyOut(body), header.skip()))
+            }
+            COPY_BOTH_MESSAGE_TAG => {
+                let body = CopyBothResponseBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::CopyBoth(body), header.skip()))
+            }
+            COPY_DONE_MESSAGE_TAG => {
+                let body = CopyDoneBody::parse(header.length as usize)
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::CopyDone(body), header.skip()))
+            }
+            ERROR_RESPONSE_MESSAGE_TAG => {
+                let body = ErrorResponseBody::parse(header.length as usize, &buf[5..])
+                    .map_err(|e| (e.into(), header.skip()))?;
+                Ok((ServerMessage::Error(body), header.skip()))
+            }
+            _ => {
+                let body = super::UnknownMessageBody::parse(&buf[5..], header);
+                Ok((ServerMessage::Unknown(body), header.skip()))
+            }
         }
     }
 }
