@@ -486,10 +486,10 @@ impl SubsequentMessage {
                     }
                     Ok(Some((SubsequentMessage::Terminate, header.skip())))
                 }
-                _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
-                    Some(body) => Ok(Some((SubsequentMessage::Unknown(body), header.skip()))),
-                    None => Ok(None),
-                },
+                _ => {
+                    let body = super::UnknownMessageBody::parse(&buf[5..], header);
+                    Ok(Some((SubsequentMessage::Unknown(body), header.skip())))
+                }
             },
             None => Ok(None),
         }

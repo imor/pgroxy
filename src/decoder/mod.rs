@@ -108,19 +108,11 @@ enum CopyDoneBodyParseError {
 }
 
 impl CopyDoneBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CopyDoneBody>, CopyDoneBodyParseError> {
-        let body_buf = &buf[5..];
-        if length < 4 {
-            buf.advance(length + 1);
+    fn parse(length: usize) -> Result<CopyDoneBody, CopyDoneBodyParseError> {
+        if length != 4 {
             return Err(CopyDoneBodyParseError::InvalidLength(length, 4));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        Ok(Some(CopyDoneBody))
+        Ok(CopyDoneBody)
     }
 }
 
@@ -140,13 +132,13 @@ impl Display for UnknownMessageBody {
 }
 
 impl UnknownMessageBody {
-    fn parse(buf: &[u8], header: Header) -> Option<UnknownMessageBody> {
+    fn parse(buf: &[u8], header: Header) -> UnknownMessageBody {
         let data_length = header.length as usize - 4;
 
-        Some(UnknownMessageBody {
+        UnknownMessageBody {
             header,
             bytes: buf[..data_length].to_vec(),
-        })
+        }
     }
 }
 

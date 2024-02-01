@@ -151,120 +151,76 @@ impl ServerMessage {
         match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
             Some(header) => match header.tag {
                 AUTHENTICATION_MESSAGE_TAG => {
-                    match AuthenticationRequest::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(auth_req) => Ok(Some((
-                            ServerMessage::Authentication(auth_req),
-                            header.skip(),
-                        ))),
-                        None => Ok(None),
-                    }
+                    let auth_req = AuthenticationRequest::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((
+                        ServerMessage::Authentication(auth_req),
+                        header.skip(),
+                    )))
                 }
                 PARAM_STATUS_MESSAGE_TAG => {
-                    match ParameterStatusBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => {
-                            Ok(Some((ServerMessage::ParameterStatus(body), header.skip())))
-                        }
-                        None => Ok(None),
-                    }
+                    let body = ParameterStatusBody::parse(&buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::ParameterStatus(body), header.skip())))
                 }
                 BACKEND_KEY_DATA_MESSAGE_TAG => {
-                    match BackendKeyDataBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => {
-                            Ok(Some((ServerMessage::BackendKeyData(body), header.skip())))
-                        }
-                        None => Ok(None),
-                    }
+                    let body = BackendKeyDataBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::BackendKeyData(body), header.skip())))
                 }
                 READY_FOR_QUERY_MESSAGE_TAG => {
-                    match ReadyForQueryBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::ReadyForQuery(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = ReadyForQueryBody::parse(header.length as usize, buf)
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::ReadyForQuery(body), header.skip())))
                 }
                 ROW_DESCRIPTION_MESSAGE_TAG => {
-                    match RowDescriptionBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => {
-                            Ok(Some((ServerMessage::RowDescription(body), header.skip())))
-                        }
-                        None => Ok(None),
-                    }
+                    let body = RowDescriptionBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::RowDescription(body), header.skip())))
                 }
                 COMMAND_COMPLETE_MESSAGE_TAG => {
-                    match CommandCompleteBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => {
-                            Ok(Some((ServerMessage::CommandComplete(body), header.skip())))
-                        }
-                        None => Ok(None),
-                    }
+                    let body = CommandCompleteBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::CommandComplete(body), header.skip())))
                 }
                 DATA_ROW_MESSAGE_TAG => {
-                    match DataRowBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::DataRow(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = DataRowBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::DataRow(body), header.skip())))
                 }
                 COPY_DATA_MESSAGE_TAG => {
                     let body = CopyDataBody::parse(header.length as usize, buf);
                     Ok(Some((ServerMessage::CopyData(body), header.skip())))
                 }
                 COPY_IN_MESSAGE_TAG => {
-                    match CopyInResponseBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::CopyIn(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = CopyInResponseBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::CopyIn(body), header.skip())))
                 }
                 COPY_OUT_MESSAGE_TAG => {
-                    match CopyOutResponseBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::CopyOut(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = CopyOutResponseBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::CopyOut(body), header.skip())))
                 }
                 COPY_BOTH_MESSAGE_TAG => {
-                    match CopyBothResponseBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::CopyBoth(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = CopyBothResponseBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::CopyBoth(body), header.skip())))
                 }
                 COPY_DONE_MESSAGE_TAG => {
-                    match CopyDoneBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::CopyDone(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = CopyDoneBody::parse(header.length as usize)
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::CopyDone(body), header.skip())))
                 }
                 ERROR_RESPONSE_MESSAGE_TAG => {
-                    match ErrorResponseBody::parse(header.length as usize, buf)
-                        .map_err(|e| (e.into(), header.skip()))?
-                    {
-                        Some(body) => Ok(Some((ServerMessage::Error(body), header.skip()))),
-                        None => Ok(None),
-                    }
+                    let body = ErrorResponseBody::parse(header.length as usize, &buf[5..])
+                        .map_err(|e| (e.into(), header.skip()))?;
+                    Ok(Some((ServerMessage::Error(body), header.skip())))
                 }
-                _ => match super::UnknownMessageBody::parse(&buf[5..], header) {
-                    Some(body) => Ok(Some((ServerMessage::Unknown(body), header.skip()))),
-                    None => Ok(None),
-                },
+                _ => {
+                    let body = super::UnknownMessageBody::parse(&buf[5..], header);
+                    Ok(Some((ServerMessage::Unknown(body), header.skip())))
+                }
             },
             None => Ok(None),
         }
@@ -340,103 +296,83 @@ const AUTHETICATION_SASL_FINAL_TYPE: i32 = 12;
 impl AuthenticationRequest {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<AuthenticationRequest>, AuthenticationRequestParseError> {
-        let body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-
-        let typ = BigEndian::read_i32(body_buf);
+        buf: &[u8],
+    ) -> Result<AuthenticationRequest, AuthenticationRequestParseError> {
+        let typ = BigEndian::read_i32(buf);
 
         match typ {
             AUTHETICATION_OK_TYPE => {
                 if length != 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationOk))
+                    Ok(AuthenticationRequest::AuthenticationOk)
                 }
             }
             AUTHETICATION_KERBEROS_TYPE => {
                 if length != 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationKerberosV5))
+                    Ok(AuthenticationRequest::AuthenticationKerberosV5)
                 }
             }
             AUTHETICATION_CLEARTEXT_PWD_TYPE => {
                 if length != 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationCleartextPassword))
+                    Ok(AuthenticationRequest::AuthenticationCleartextPassword)
                 }
             }
             AUTHETICATION_MD5_PWD_TYPE => {
                 if length != 12 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 12))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationMd5Password))
+                    Ok(AuthenticationRequest::AuthenticationMd5Password)
                 }
             }
             AUTHETICATION_GSS_TYPE => {
                 if length != 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationGss))
+                    Ok(AuthenticationRequest::AuthenticationGss)
                 }
             }
             AUTHETICATION_GSS_CONTINUE_TYPE => {
                 if length <= 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationGssContinue))
+                    Ok(AuthenticationRequest::AuthenticationGssContinue)
                 }
             }
             AUTHETICATION_SSPI_TYPE => {
                 if length != 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::InvalidLength(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationSspi))
+                    Ok(AuthenticationRequest::AuthenticationSspi)
                 }
             }
             AUTHETICATION_SASL_TYPE => {
                 if length <= 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
-                    match SaslBody::parse(length, buf)? {
-                        Some(body) => Ok(Some(AuthenticationRequest::AuthenticationSasl(body))),
-                        None => Ok(None),
-                    }
+                    let body = SaslBody::parse(&buf[4..length - 4])?;
+                    Ok(AuthenticationRequest::AuthenticationSasl(body))
                 }
             }
             AUTHETICATION_SASL_CONTINUE_TYPE => {
                 if length <= 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationSaslContinue))
+                    Ok(AuthenticationRequest::AuthenticationSaslContinue)
                 }
             }
             AUTHETICATION_SASL_FINAL_TYPE => {
                 if length <= 8 {
-                    buf.advance(length + 1);
                     Err(AuthenticationRequestParseError::LengthTooShort(length, 8))
                 } else {
-                    Ok(Some(AuthenticationRequest::AuthenticationSaslFinal))
+                    Ok(AuthenticationRequest::AuthenticationSaslFinal)
                 }
             }
-            typ => {
-                buf.advance(length + 1);
-                Err(AuthenticationRequestParseError::InvalidType(typ))
-            }
+            typ => Err(AuthenticationRequestParseError::InvalidType(typ)),
         }
     }
 }
@@ -467,28 +403,22 @@ enum SaslBodyParseError {
 }
 
 impl SaslBody {
-    fn parse(length: usize, buf: &mut BytesMut) -> Result<Option<SaslBody>, SaslBodyParseError> {
-        let mut mechanism_start = 9;
+    fn parse(buf: &[u8]) -> Result<SaslBody, SaslBodyParseError> {
+        println!("SASL BODY BYTES: {buf:?}");
+        let mut mechanism_start = 0;
         let mut auth_mechanisms = Vec::new();
         loop {
-            let (mechanism, end_pos) = match super::read_cstr(&buf[mechanism_start..]) {
-                Ok(res) => res,
-                Err(e) => {
-                    buf.advance(length);
-                    return Err(e.into());
-                }
-            };
+            let (mechanism, end_pos) = super::read_cstr(&buf[mechanism_start..])?;
             auth_mechanisms.push(mechanism);
             mechanism_start += end_pos;
-            if mechanism_start >= length - 1 {
-                if buf[length - 1] != 0 {
-                    buf.advance(length);
+            if mechanism_start >= buf.len() {
+                if buf[buf.len() - 1] != 0 {
                     return Err(SaslBodyParseError::NotNullTerminated);
                 }
                 break;
             }
         }
-        Ok(Some(SaslBody { auth_mechanisms }))
+        Ok(SaslBody { auth_mechanisms })
     }
 }
 
@@ -551,33 +481,24 @@ enum ParameterStatusBodyParseError {
 }
 
 impl ParameterStatusBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<ParameterStatusBody>, ParameterStatusBodyParseError> {
-        let body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        let (param_name, end_pos) = match super::read_cstr(body_buf) {
+    fn parse(buf: &[u8]) -> Result<ParameterStatusBody, ParameterStatusBodyParseError> {
+        let (param_name, end_pos) = match super::read_cstr(buf) {
             Ok(res) => res,
             Err(e) => {
-                buf.advance(length + 1);
                 return Err(ParameterStatusBodyParseError::InvalidParamName(e));
             }
         };
-        let (param_value, _) = match super::read_cstr(&body_buf[end_pos..]) {
+        let (param_value, _) = match super::read_cstr(&buf[end_pos..]) {
             Ok(res) => res,
             Err(e) => {
-                buf.advance(length + 1);
                 return Err(ParameterStatusBodyParseError::InvalidParamValue(e));
             }
         };
 
-        Ok(Some(ParameterStatusBody {
+        Ok(ParameterStatusBody {
             param_name,
             param_value,
-        }))
+        })
     }
 }
 
@@ -605,21 +526,15 @@ enum BackendKeyDataBodyParseError {
 impl BackendKeyDataBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<BackendKeyDataBody>, BackendKeyDataBodyParseError> {
-        let body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-
+        buf: &[u8],
+    ) -> Result<BackendKeyDataBody, BackendKeyDataBodyParseError> {
         if length != 12 {
-            buf.advance(length + 1);
             Err(BackendKeyDataBodyParseError::InvalidLength(length, 12))
         } else {
-            Ok(Some(BackendKeyDataBody {
-                process_id: BigEndian::read_i32(&body_buf[..4]),
-                secret_key: BigEndian::read_i32(&body_buf[4..8]),
-            }))
+            Ok(BackendKeyDataBody {
+                process_id: BigEndian::read_i32(&buf[..4]),
+                secret_key: BigEndian::read_i32(&buf[4..8]),
+            })
         }
     }
 }
@@ -655,22 +570,13 @@ enum ReadyForQueryBodyParseError {
 }
 
 impl ReadyForQueryBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<ReadyForQueryBody>, ReadyForQueryBodyParseError> {
-        let body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-
+    fn parse(length: usize, buf: &[u8]) -> Result<ReadyForQueryBody, ReadyForQueryBodyParseError> {
         if length != 5 {
-            buf.advance(length + 1);
             Err(ReadyForQueryBodyParseError::InvalidLength(length, 5))
         } else {
-            Ok(Some(ReadyForQueryBody {
-                transaction_status: body_buf[0],
-            }))
+            Ok(ReadyForQueryBody {
+                transaction_status: buf[0],
+            })
         }
     }
 }
@@ -693,14 +599,9 @@ enum RowDescriptionFieldParseError {
 }
 
 impl RowDescriptionField {
-    fn parse(
-        buf: &[u8],
-    ) -> Result<Option<(RowDescriptionField, usize)>, RowDescriptionFieldParseError> {
+    fn parse(buf: &[u8]) -> Result<(RowDescriptionField, usize), RowDescriptionFieldParseError> {
         let (name, end_pos) = read_cstr(buf)?;
         let buf = &buf[end_pos..];
-        if buf.len() < 18 {
-            return Ok(None);
-        }
 
         let oid = BigEndian::read_i32(buf);
         let attnum = BigEndian::read_i16(&buf[4..]);
@@ -709,7 +610,7 @@ impl RowDescriptionField {
         let typmod = BigEndian::read_i32(&buf[12..]);
         let format = BigEndian::read_i16(&buf[16..]);
 
-        Ok(Some((
+        Ok((
             RowDescriptionField {
                 name,
                 oid,
@@ -720,7 +621,7 @@ impl RowDescriptionField {
                 format,
             },
             end_pos + 18,
-        )))
+        ))
     }
 }
 
@@ -757,38 +658,24 @@ enum RowDescriptionBodyParseError {
 impl RowDescriptionBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<RowDescriptionBody>, RowDescriptionBodyParseError> {
-        let mut body_buf = &buf[5..];
+        mut buf: &[u8],
+    ) -> Result<RowDescriptionBody, RowDescriptionBodyParseError> {
         if length < 6 {
-            buf.advance(length + 1);
             return Err(RowDescriptionBodyParseError::LengthTooShort(length, 6));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        let num_fields = BigEndian::read_i16(body_buf);
+        let num_fields = BigEndian::read_i16(buf);
         if num_fields < 0 {
             buf.advance(length + 1);
             return Err(RowDescriptionBodyParseError::InvalidNumFields(num_fields));
         }
-        body_buf = &body_buf[2..];
+        buf = &buf[2..];
         let mut fields = Vec::with_capacity(num_fields as usize);
         for _ in 0..num_fields {
-            let (field, end_pos) = match RowDescriptionField::parse(body_buf) {
-                Ok(field) => match field {
-                    Some(res) => res,
-                    None => return Ok(None),
-                },
-                Err(e) => {
-                    buf.advance(length + 1);
-                    return Err(e.into());
-                }
-            };
+            let (field, end_pos) = RowDescriptionField::parse(buf)?;
             fields.push(field);
-            body_buf = &body_buf[end_pos..];
+            buf = &buf[end_pos..];
         }
-        Ok(Some(RowDescriptionBody { fields }))
+        Ok(RowDescriptionBody { fields })
     }
 }
 
@@ -817,18 +704,13 @@ enum CommandCompleteBodyParseError {
 impl CommandCompleteBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CommandCompleteBody>, CommandCompleteBodyParseError> {
-        let body_buf = &buf[5..];
+        buf: &[u8],
+    ) -> Result<CommandCompleteBody, CommandCompleteBodyParseError> {
         if length < 5 {
-            buf.advance(length + 1);
             return Err(CommandCompleteBodyParseError::LengthTooShort(length, 5));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        let (command_tag, _) = read_cstr(body_buf)?;
-        Ok(Some(CommandCompleteBody { command_tag }))
+        let (command_tag, _) = read_cstr(buf)?;
+        Ok(CommandCompleteBody { command_tag })
     }
 }
 
@@ -844,25 +726,19 @@ enum DataRowColumnParseError {
 }
 
 impl DataRowColumn {
-    fn parse(buf: &[u8]) -> Result<Option<(DataRowColumn, usize)>, DataRowColumnParseError> {
-        if buf.len() < 4 {
-            return Ok(None);
-        }
+    fn parse(buf: &[u8]) -> Result<(DataRowColumn, usize), DataRowColumnParseError> {
         let len = BigEndian::read_i32(buf);
         // len is -1 when column is null
         if len == -1 {
-            return Ok(Some((DataRowColumn { value: Vec::new() }, 4)));
+            return Ok((DataRowColumn { value: Vec::new() }, 4));
         }
         if len < 0 {
             return Err(DataRowColumnParseError::InvalidLength(len));
         }
-        if buf.len() < len as usize + 4 {
-            return Ok(None);
-        }
         let buf = &buf[4..];
         let value = buf[..len as usize].to_vec();
         let len = len as usize + 4;
-        Ok(Some((DataRowColumn { value }, len)))
+        Ok((DataRowColumn { value }, len))
     }
 }
 
@@ -895,40 +771,22 @@ enum DataRowBodyParseError {
 }
 
 impl DataRowBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<DataRowBody>, DataRowBodyParseError> {
-        let mut body_buf = &buf[5..];
+    fn parse(length: usize, mut buf: &[u8]) -> Result<DataRowBody, DataRowBodyParseError> {
         if length < 6 {
-            buf.advance(length + 1);
             return Err(DataRowBodyParseError::LengthTooShort(length, 6));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-        let num_cols = BigEndian::read_i16(body_buf);
+        let num_cols = BigEndian::read_i16(buf);
         if num_cols < 0 {
-            buf.advance(length + 1);
             return Err(DataRowBodyParseError::InvalidNumCols(num_cols));
         }
-        body_buf = &body_buf[2..];
+        buf = &buf[2..];
         let mut columns = Vec::with_capacity(num_cols as usize);
         for _ in 0..num_cols {
-            let (column, end_pos) = match DataRowColumn::parse(body_buf) {
-                Ok(drc) => match drc {
-                    Some(res) => res,
-                    None => return Ok(None),
-                },
-                Err(e) => {
-                    buf.advance(length + 1);
-                    return Err(e.into());
-                }
-            };
+            let (column, end_pos) = DataRowColumn::parse(buf)?;
             columns.push(column);
-            body_buf = &body_buf[end_pos..];
+            buf = &buf[end_pos..];
         }
-        Ok(Some(DataRowBody { columns }))
+        Ok(DataRowBody { columns })
     }
 }
 
@@ -970,20 +828,15 @@ enum CopyInResponseBodyParseError {
 impl CopyInResponseBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CopyInResponseBody>, CopyInResponseBodyParseError> {
-        let mut body_buf = &buf[5..];
+        mut buf: &[u8],
+    ) -> Result<CopyInResponseBody, CopyInResponseBodyParseError> {
         if length < 7 {
-            buf.advance(length + 1);
             return Err(CopyInResponseBodyParseError::LengthTooShort(length, 7));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
 
-        let format = body_buf[0] as i8;
-        body_buf = &body_buf[1..];
-        let num_cols = BigEndian::read_i16(body_buf);
+        let format = buf[0] as i8;
+        buf = &buf[1..];
+        let num_cols = BigEndian::read_i16(buf);
 
         if num_cols < 0 {
             return Err(CopyInResponseBodyParseError::InvalidNumCols(num_cols));
@@ -992,15 +845,15 @@ impl CopyInResponseBody {
         let mut col_formats = Vec::new();
 
         for _ in 0..num_cols {
-            let format = BigEndian::read_i16(body_buf);
+            let format = BigEndian::read_i16(buf);
             col_formats.push(format);
-            body_buf = &body_buf[2..];
+            buf = &buf[2..];
         }
 
-        Ok(Some(CopyInResponseBody {
+        Ok(CopyInResponseBody {
             format,
             col_formats,
-        }))
+        })
     }
 }
 
@@ -1034,20 +887,15 @@ enum CopyOutResponseBodyParseError {
 impl CopyOutResponseBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CopyOutResponseBody>, CopyOutResponseBodyParseError> {
-        let mut body_buf = &buf[5..];
+        mut buf: &[u8],
+    ) -> Result<CopyOutResponseBody, CopyOutResponseBodyParseError> {
         if length < 7 {
-            buf.advance(length + 1);
             return Err(CopyOutResponseBodyParseError::LengthTooShort(length, 7));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
 
-        let format = body_buf[0] as i8;
-        body_buf = &body_buf[1..];
-        let num_cols = BigEndian::read_i16(body_buf);
+        let format = buf[0] as i8;
+        buf = &buf[1..];
+        let num_cols = BigEndian::read_i16(buf);
 
         if num_cols < 0 {
             return Err(CopyOutResponseBodyParseError::InvalidNumCols(num_cols));
@@ -1056,15 +904,15 @@ impl CopyOutResponseBody {
         let mut col_formats = Vec::new();
 
         for _ in 0..num_cols {
-            let format = BigEndian::read_i16(body_buf);
+            let format = BigEndian::read_i16(buf);
             col_formats.push(format);
-            body_buf = &body_buf[2..];
+            buf = &buf[2..];
         }
 
-        Ok(Some(CopyOutResponseBody {
+        Ok(CopyOutResponseBody {
             format,
             col_formats,
-        }))
+        })
     }
 }
 
@@ -1098,20 +946,15 @@ enum CopyBothResponseBodyParseError {
 impl CopyBothResponseBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CopyBothResponseBody>, CopyBothResponseBodyParseError> {
-        let mut body_buf = &buf[5..];
+        mut buf: &[u8],
+    ) -> Result<CopyBothResponseBody, CopyBothResponseBodyParseError> {
         if length < 7 {
-            buf.advance(length + 1);
             return Err(CopyBothResponseBodyParseError::LengthTooShort(length, 7));
         }
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
 
-        let format = body_buf[0] as i8;
-        body_buf = &body_buf[1..];
-        let num_cols = BigEndian::read_i16(body_buf);
+        let format = buf[0] as i8;
+        buf = &buf[1..];
+        let num_cols = BigEndian::read_i16(buf);
 
         if num_cols < 0 {
             return Err(CopyBothResponseBodyParseError::InvalidNumCols(num_cols));
@@ -1120,15 +963,15 @@ impl CopyBothResponseBody {
         let mut col_formats = Vec::new();
 
         for _ in 0..num_cols {
-            let format = BigEndian::read_i16(body_buf);
+            let format = BigEndian::read_i16(buf);
             col_formats.push(format);
-            body_buf = &body_buf[2..];
+            buf = &buf[2..];
         }
 
-        Ok(Some(CopyBothResponseBody {
+        Ok(CopyBothResponseBody {
             format,
             col_formats,
-        }))
+        })
     }
 }
 
@@ -1139,23 +982,19 @@ pub struct ErrorField {
 }
 
 impl ErrorField {
-    fn parse(buf: &[u8]) -> Result<Option<(ErrorField, usize)>, ReadCStrError> {
-        if buf.len() < 2 {
-            return Ok(None);
-        }
-
+    fn parse(buf: &[u8]) -> Result<(ErrorField, usize), ReadCStrError> {
         let code = buf[0];
         if code == 0 {
-            return Ok(Some((
+            return Ok((
                 ErrorField {
                     code: 0,
                     value: "".to_string(),
                 },
                 1,
-            )));
+            ));
         }
         let (value, end_pos) = read_cstr(&buf[1..])?;
-        Ok(Some((ErrorField { code, value }, end_pos)))
+        Ok((ErrorField { code, value }, end_pos))
     }
 }
 
@@ -1187,31 +1026,22 @@ enum ErrorResponseBodyParseError {
 impl ErrorResponseBody {
     fn parse(
         length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<ErrorResponseBody>, ErrorResponseBodyParseError> {
-        let mut body_buf = &buf[5..];
-        if body_buf.len() < length - 4 {
-            return Ok(None);
-        }
-
+        mut buf: &[u8],
+    ) -> Result<ErrorResponseBody, ErrorResponseBodyParseError> {
         if length < 5 {
-            buf.advance(length + 1);
             return Err(ErrorResponseBodyParseError::LengthTooShort(length, 5));
         }
 
         let mut fields = Vec::new();
         loop {
-            let (field, end_pos) = match ErrorField::parse(body_buf)? {
-                Some(res) => res,
-                None => return Ok(None),
-            };
+            let (field, end_pos) = ErrorField::parse(buf)?;
             if field.code == 0 {
                 break;
             }
             fields.push(field);
-            body_buf = &body_buf[end_pos..];
+            buf = &buf[end_pos..];
         }
-        Ok(Some(ErrorResponseBody { fields }))
+        Ok(ErrorResponseBody { fields })
     }
 }
 
