@@ -409,7 +409,6 @@ enum SaslBodyParseError {
 
 impl SaslBody {
     fn parse(buf: &[u8]) -> Result<SaslBody, SaslBodyParseError> {
-        println!("SASL BODY BYTES: {buf:?}");
         let mut mechanism_start = 0;
         let mut auth_mechanisms = Vec::new();
         loop {
