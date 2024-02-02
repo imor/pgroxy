@@ -110,7 +110,7 @@ const ROW_DESCRIPTION_MESSAGE_TAG: u8 = b'T';
 const COMMAND_COMPLETE_MESSAGE_TAG: u8 = b'C';
 const DATA_ROW_MESSAGE_TAG: u8 = b'D';
 const COPY_IN_MESSAGE_TAG: u8 = b'G';
-const COPY_OUT_MESSAGE_TAG: u8 = b'H'; //todo: parse only in copy mode as flush message also has this tag
+const COPY_OUT_MESSAGE_TAG: u8 = b'H';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 const COPY_BOTH_MESSAGE_TAG: u8 = b'W';
 const COPY_DONE_MESSAGE_TAG: u8 = b'c';
@@ -237,7 +237,7 @@ pub enum AuthenticationRequest {
     AuthenticationCleartextPassword,
     AuthenticationMd5Password(Md5Body),
     AuthenticationGss,
-    AuthenticationGssContinue,
+    AuthenticationGssContinue(GssContinueBody),
     AuthenticationSspi,
     AuthenticationSasl(SaslBody),
     AuthenticationSaslContinue,
@@ -255,6 +255,10 @@ impl Display for AuthenticationRequest {
                 writeln!(f, "{body}")?;
                 return Ok(());
             }
+            AuthenticationRequest::AuthenticationGssContinue(body) => {
+                writeln!(f, "{body}")?;
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -265,12 +269,12 @@ impl Display for AuthenticationRequest {
                 "AuthenticationCleartextPassword"
             }
             AuthenticationRequest::AuthenticationGss => "AuthenticationGSS",
-            AuthenticationRequest::AuthenticationGssContinue => "AuthenticationGSSContinue",
             AuthenticationRequest::AuthenticationSspi => "AuthenticationSSPI",
             AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
             AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
             _ => "",
         };
+
         writeln!(f)?;
         writeln!(f, "  Type: {typ}")
     }
@@ -359,7 +363,8 @@ impl AuthenticationRequest {
                         4,
                     ))
                 } else {
-                    Ok(AuthenticationRequest::AuthenticationGssContinue)
+                    let body = GssContinueBody::parse(&buf[4..]);
+                    Ok(AuthenticationRequest::AuthenticationGssContinue(body))
                 }
             }
             AUTHETICATION_SSPI_TYPE => {
@@ -433,6 +438,28 @@ impl Md5Body {
 
         let salt: [u8; 4] = buf.try_into().unwrap();
         Ok(Md5Body { salt })
+    }
+}
+
+#[derive(Debug)]
+pub struct GssContinueBody {
+    auth_data: Vec<u8>,
+}
+
+impl Display for GssContinueBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: AuthenticationGssContinue")?;
+        writeln!(f, "  Auth data: {:?}", self.auth_data)?;
+        Ok(())
+    }
+}
+
+impl GssContinueBody {
+    fn parse(buf: &[u8]) -> GssContinueBody {
+        GssContinueBody {
+            auth_data: buf.to_vec(),
+        }
     }
 }
 
@@ -1169,7 +1196,7 @@ impl Decoder for ServerMessageDecoder {
                         AuthenticationRequest::AuthenticationCleartextPassword => {}
                         AuthenticationRequest::AuthenticationMd5Password(_) => {}
                         AuthenticationRequest::AuthenticationGss => {}
-                        AuthenticationRequest::AuthenticationGssContinue => {}
+                        AuthenticationRequest::AuthenticationGssContinue(_) => {}
                         AuthenticationRequest::AuthenticationSspi => {}
                         AuthenticationRequest::AuthenticationSasl(_) => {
                             *state = super::ProtocolState::AuthenticatingSasl(false)
