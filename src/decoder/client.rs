@@ -80,7 +80,9 @@ impl From<ParseFirstMessageError> for std::io::Error {
 }
 
 impl FirstMessage {
-    fn parse(buf: &mut BytesMut) -> Result<Option<FirstMessage>, ParseFirstMessageError> {
+    fn parse(
+        buf: &mut BytesMut,
+    ) -> Result<Option<(FirstMessage, usize)>, (ParseFirstMessageError, usize)> {
         if buf.len() < 4 {
             // Not enough data to read message length
             return Ok(None);
@@ -92,7 +94,7 @@ impl FirstMessage {
         // All startup messages are at least 8 bytes long
         if length < 8 {
             buf.advance(length);
-            return Err(ParseFirstMessageError::LengthTooSmall(length, 8));
+            return Err((ParseFirstMessageError::LengthTooSmall(length, 8), length));
         }
 
         if buf.len() < length {
@@ -115,25 +117,24 @@ impl FirstMessage {
         let res = match typ {
             CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(payload_buf) {
                 Ok(body) => match body {
-                    Some(body) => Ok(Some(FirstMessage::CancelRequest(body))),
+                    Some(body) => Ok(Some((FirstMessage::CancelRequest(body), length))),
                     None => return Ok(None),
                 },
-                Err(e) => Err(e.into()),
+                Err(e) => Err((e.into(), length)),
             },
-            SSL_REQUEST_TYPE => Ok(Some(FirstMessage::SslRequest)),
-            GSS_ENC_REQUEST_TYPE => Ok(Some(FirstMessage::GssEncRequest)),
+            SSL_REQUEST_TYPE => Ok(Some((FirstMessage::SslRequest, length))),
+            GSS_ENC_REQUEST_TYPE => Ok(Some((FirstMessage::GssEncRequest, length))),
             _ => match StartupMessageBody::parse(typ, &payload_buf) {
                 Ok(body) => match body {
-                    Some(body) => Ok(Some(FirstMessage::StartupMessage(body))),
+                    Some(body) => Ok(Some((FirstMessage::StartupMessage(body), length))),
                     None => return Ok(None),
                 },
-                Err(e) => Err(e.into()),
+                Err(e) => Err((e.into(), length)),
             },
         };
 
         // Use advance to modify buf such that it no longer contains
         // this message.
-        buf.advance(length);
         res
     }
 }
@@ -529,47 +530,42 @@ impl Decoder for ClientMessageDecoder {
             .protocol_state
             .lock()
             .expect("failed to lock protocol_state");
-        if state.startup_done() {
+        let (res, skip) = if state.startup_done() {
             match SubsequentMessage::parse(buf) {
                 Ok(msg) => match msg {
-                    Some((msg, skip)) => {
-                        buf.advance(skip);
-                        Ok(Some(ClientMessage::Subsequent(msg)))
-                    }
-                    None => Ok(None),
+                    Some((msg, skip)) => (Ok(Some(ClientMessage::Subsequent(msg))), skip),
+                    None => (Ok(None), 0),
                 },
-                Err((e, skip)) => {
-                    buf.advance(skip);
-                    Err(e.into())
-                }
+                Err((e, skip)) => (Err(e.into()), skip),
             }
         } else if state.authenticating_sasl() {
             match SaslMessage::parse(buf, state.initial_response_sent()) {
                 Ok(msg) => match msg {
                     Some((msg, skip)) => {
-                        buf.advance(skip);
                         if let SaslMessage::InitialResponse(_) = msg {
                             *state = super::ProtocolState::AuthenticatingSasl(true);
                         }
-                        Ok(Some(ClientMessage::Sasl(msg)))
+                        (Ok(Some(ClientMessage::Sasl(msg))), skip)
                     }
-                    None => Ok(None),
+                    None => (Ok(None), 0),
                 },
-                Err((e, skip)) => {
-                    buf.advance(skip);
-                    return Err(e.into());
-                }
+                Err((e, skip)) => (Err(e.into()), skip),
             }
         } else {
-            match FirstMessage::parse(buf)? {
-                Some(msg) => {
-                    if let FirstMessage::SslRequest = msg {
-                        *state = super::ProtocolState::NegotiatingSsl;
+            match FirstMessage::parse(buf) {
+                Ok(msg) => match msg {
+                    Some((msg, skip)) => {
+                        if let FirstMessage::SslRequest = msg {
+                            *state = super::ProtocolState::NegotiatingSsl;
+                        }
+                        (Ok(Some(ClientMessage::First(msg))), skip)
                     }
-                    Ok(Some(ClientMessage::First(msg)))
-                }
-                None => Ok(None),
+                    None => (Ok(None), 0),
+                },
+                Err((e, skip)) => (Err(e.into()), skip),
             }
-        }
+        };
+        buf.advance(skip);
+        res
     }
 }
