@@ -235,7 +235,7 @@ pub enum AuthenticationRequest {
     AuthenticationOk,
     AuthenticationKerberosV5,
     AuthenticationCleartextPassword,
-    AuthenticationMd5Password,
+    AuthenticationMd5Password(Md5Body),
     AuthenticationGss,
     AuthenticationGssContinue,
     AuthenticationSspi,
@@ -246,23 +246,30 @@ pub enum AuthenticationRequest {
 
 impl Display for AuthenticationRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let AuthenticationRequest::AuthenticationSasl(body) = self {
-            writeln!(f, "{body}")?;
-            return Ok(());
+        match self {
+            AuthenticationRequest::AuthenticationMd5Password(body) => {
+                writeln!(f, "{body}")?;
+                return Ok(());
+            }
+            AuthenticationRequest::AuthenticationSasl(body) => {
+                writeln!(f, "{body}")?;
+                return Ok(());
+            }
+            _ => {}
         }
+
         let typ = match self {
             AuthenticationRequest::AuthenticationOk => "AuthenticationOk",
             AuthenticationRequest::AuthenticationKerberosV5 => "AuthenticationKerberosV5",
             AuthenticationRequest::AuthenticationCleartextPassword => {
                 "AuthenticationCleartextPassword"
             }
-            AuthenticationRequest::AuthenticationMd5Password => "AuthenticationMD5Password",
             AuthenticationRequest::AuthenticationGss => "AuthenticationGSS",
             AuthenticationRequest::AuthenticationGssContinue => "AuthenticationGSSContinue",
             AuthenticationRequest::AuthenticationSspi => "AuthenticationSSPI",
-            AuthenticationRequest::AuthenticationSasl(_) => "AuthenticationSASL",
             AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
             AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
+            _ => "",
         };
         writeln!(f)?;
         writeln!(f, "  Type: {typ}")
@@ -279,6 +286,9 @@ enum AuthenticationRequestParseError {
 
     #[error("invalid type {0}")]
     InvalidType(i32),
+
+    #[error("md5 body parse error: {0}")]
+    Md5(#[from] Md5BodyParseError),
 
     #[error("sasl body parse error: {0}")]
     Sasl(#[from] SaslBodyParseError),
@@ -331,7 +341,8 @@ impl AuthenticationRequest {
                 if buf.len() != 8 {
                     Err(AuthenticationRequestParseError::InvalidLength(buf.len(), 8))
                 } else {
-                    Ok(AuthenticationRequest::AuthenticationMd5Password)
+                    let body = Md5Body::parse(&buf[4..])?;
+                    Ok(AuthenticationRequest::AuthenticationMd5Password(body))
                 }
             }
             AUTHETICATION_GSS_TYPE => {
@@ -391,6 +402,37 @@ impl AuthenticationRequest {
             }
             typ => Err(AuthenticationRequestParseError::InvalidType(typ)),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Md5Body {
+    salt: [u8; 4],
+}
+
+impl Display for Md5Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: AuthenticationMd5Password")?;
+        writeln!(f, "  Salt: {:?}", self.salt)?;
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum Md5BodyParseError {
+    #[error("invalid buffer length {0}. It should be {1}")]
+    InvalidLength(usize, usize),
+}
+
+impl Md5Body {
+    fn parse(buf: &[u8]) -> Result<Md5Body, Md5BodyParseError> {
+        if buf.len() != 4 {
+            return Err(Md5BodyParseError::InvalidLength(buf.len(), 4));
+        }
+
+        let salt: [u8; 4] = buf.try_into().unwrap();
+        Ok(Md5Body { salt })
     }
 }
 
@@ -1124,7 +1166,7 @@ impl Decoder for ServerMessageDecoder {
                         }
                         AuthenticationRequest::AuthenticationKerberosV5 => {}
                         AuthenticationRequest::AuthenticationCleartextPassword => {}
-                        AuthenticationRequest::AuthenticationMd5Password => {}
+                        AuthenticationRequest::AuthenticationMd5Password(_) => {}
                         AuthenticationRequest::AuthenticationGss => {}
                         AuthenticationRequest::AuthenticationGssContinue => {}
                         AuthenticationRequest::AuthenticationSspi => {}
