@@ -1112,7 +1112,7 @@ pub struct ErrorField {
 }
 
 impl ErrorField {
-    fn parse(buf: &[u8]) -> Result<(ErrorField, usize), ErrorResponseBodyParseError> {
+    fn parse(mut buf: &[u8]) -> Result<(ErrorField, usize), ErrorResponseBodyParseError> {
         if buf.len() < 1 {
             return Err(ErrorResponseBodyParseError::LengthTooShort(buf.len(), 1));
         }
@@ -1127,8 +1127,10 @@ impl ErrorField {
                 1,
             ));
         }
-        let (value, end_pos) = read_cstr(&buf[1..])?;
-        Ok((ErrorField { code, value }, end_pos))
+
+        buf = &buf[1..];
+        let (value, end_pos) = read_cstr(buf)?;
+        Ok((ErrorField { code, value }, end_pos + 1))
     }
 }
 
@@ -1142,7 +1144,11 @@ impl Display for ErrorResponseBody {
         writeln!(f)?;
         writeln!(f, "  Type: ErrorResponse")?;
         for field in &self.fields {
-            writeln!(f, "  Field: code = {}, value = {}", field.code, field.value)?;
+            writeln!(
+                f,
+                "  Field: code = {}, value = {}",
+                field.code as char, field.value
+            )?;
         }
         Ok(())
     }
