@@ -101,9 +101,9 @@ enum CopyDoneBodyParseError {
 }
 
 impl CopyDoneBody {
-    fn parse(length: usize) -> Result<CopyDoneBody, CopyDoneBodyParseError> {
-        if length != 4 {
-            return Err(CopyDoneBodyParseError::InvalidLength(length, 4));
+    fn parse(buf: &[u8]) -> Result<CopyDoneBody, CopyDoneBodyParseError> {
+        if !buf.is_empty() {
+            return Err(CopyDoneBodyParseError::InvalidLength(buf.len(), 4));
         }
         Ok(CopyDoneBody)
     }
