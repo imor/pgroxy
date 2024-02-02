@@ -541,12 +541,12 @@ enum ParameterStatusBodyParseError {
     #[error("invalid message length {0}. It can't be smaller than {1}")]
     LengthTooShort(usize, usize),
 
-    #[error("trailing bytes after query string")]
+    #[error("trailing bytes after parameter status")]
     TrailingBytes,
 }
 
 impl ParameterStatusBody {
-    fn parse(buf: &[u8]) -> Result<ParameterStatusBody, ParameterStatusBodyParseError> {
+    fn parse(mut buf: &[u8]) -> Result<ParameterStatusBody, ParameterStatusBodyParseError> {
         let (param_name, end_pos) = match super::read_cstr(buf) {
             Ok(res) => res,
             Err(e) => {
@@ -561,7 +561,8 @@ impl ParameterStatusBody {
             ));
         }
 
-        let (param_value, end_pos) = match super::read_cstr(&buf[end_pos..]) {
+        buf = &buf[end_pos..];
+        let (param_value, end_pos) = match super::read_cstr(buf) {
             Ok(res) => res,
             Err(e) => {
                 return Err(ParameterStatusBodyParseError::InvalidParamValue(e));
