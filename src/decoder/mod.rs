@@ -18,6 +18,7 @@ pub struct Header {
 
 impl Header {
     /// Parses a `Header` from the passed `buf`.
+    /// Returns `None` if `buf` doesn't contain enough bytes to parse a full message.
     ///
     /// # Panics
     ///

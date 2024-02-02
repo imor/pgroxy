@@ -272,9 +272,7 @@ impl SaslMessage {
             Some(header) => match header.tag {
                 SASL_MESSAGE_TAG => {
                     if initial_response_sent {
-                        match ResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.msg_length()))?
-                        {
+                        match ResponseBody::parse(header.length as usize, &buf[5..]) {
                             Some(body) => {
                                 Ok(Some((SaslMessage::Response(body), header.msg_length())))
                             }
@@ -305,9 +303,6 @@ impl SaslMessage {
 enum SaslMessageParseError {
     #[error("sasl initial response parse error: {0}")]
     InitialResponse(#[from] InitialResponseBodyParseError),
-
-    #[error("sasl response body parse error: {0}")]
-    Response(#[from] ResponseBodyParseError),
 }
 
 impl From<SaslMessageParseError> for std::io::Error {
@@ -381,21 +376,11 @@ impl Display for ResponseBody {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ResponseBodyParseError {
-    #[error("invalid message length {0}. It can't be less than {1}")]
-    LengthTooShort(usize, usize),
-}
-
 impl ResponseBody {
-    fn parse(length: usize, buf: &[u8]) -> Result<Option<ResponseBody>, ResponseBodyParseError> {
-        if length <= 4 {
-            return Err(ResponseBodyParseError::LengthTooShort(length, 4));
-        }
-
+    fn parse(length: usize, buf: &[u8]) -> Option<ResponseBody> {
         let data = buf[..(length - 4)].to_vec();
 
-        Ok(Some(ResponseBody { data }))
+        Some(ResponseBody { data })
     }
 }
 
