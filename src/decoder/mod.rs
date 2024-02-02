@@ -17,6 +17,7 @@ pub struct Header {
 }
 
 const NUM_HEADER_BYTES: usize = 5;
+const NUM_LENGTH_BYTES: usize = 4;
 
 impl Header {
     /// Parses a `Header` from the passed `buf`.
@@ -26,8 +27,6 @@ impl Header {
     ///
     /// panics if the header length is less than 4.
     fn parse(buf: &[u8]) -> Option<Header> {
-        const NUM_LENGTH_BYTES: usize = 4;
-
         if buf.len() < NUM_HEADER_BYTES {
             return None;
         }
@@ -103,7 +102,7 @@ enum CopyDoneBodyParseError {
 impl CopyDoneBody {
     fn parse(buf: &[u8]) -> Result<CopyDoneBody, CopyDoneBodyParseError> {
         if !buf.is_empty() {
-            return Err(CopyDoneBodyParseError::InvalidLength(buf.len(), 4));
+            return Err(CopyDoneBodyParseError::InvalidLength(buf.len(), 0));
         }
         Ok(CopyDoneBody)
     }

@@ -83,8 +83,9 @@ impl FirstMessage {
     fn parse(
         buf: &mut BytesMut,
     ) -> Result<Option<(FirstMessage, usize)>, (ParseFirstMessageError, usize)> {
-        if buf.len() < 4 {
-            // Not enough data to read message length
+        if buf.len() < 8 {
+            // Not enough data to read message length and request code
+            buf.reserve(8 - buf.len());
             return Ok(None);
         }
 
@@ -93,7 +94,6 @@ impl FirstMessage {
 
         // All startup messages are at least 8 bytes long
         if length < 8 {
-            buf.advance(length);
             return Err((ParseFirstMessageError::LengthTooSmall(length, 8), length));
         }
 
@@ -133,8 +133,6 @@ impl FirstMessage {
             },
         };
 
-        // Use advance to modify buf such that it no longer contains
-        // this message.
         res
     }
 }
@@ -230,7 +228,7 @@ enum ParseCancelRequestBodyError {
 impl CancelRequestBody {
     fn parse(buf: &[u8]) -> Result<Option<CancelRequestBody>, ParseCancelRequestBodyError> {
         if buf.len() != 8 {
-            return Err(ParseCancelRequestBodyError::InvalidLength(16, buf.len()));
+            return Err(ParseCancelRequestBodyError::InvalidLength(8, buf.len()));
         }
 
         Ok(Some(CancelRequestBody {

@@ -760,11 +760,19 @@ pub struct DataRowColumn {
 enum DataRowColumnParseError {
     #[error("invalid length {0}")]
     InvalidLength(i32),
+
+    #[error("invalid message length {0}. It can't be less than {1}")]
+    LengthTooShort(usize, usize),
 }
 
 impl DataRowColumn {
     fn parse(mut buf: &[u8]) -> Result<(DataRowColumn, usize), DataRowColumnParseError> {
+        if buf.len() < 4 {
+            return Err(DataRowColumnParseError::LengthTooShort(buf.len(), 4));
+        }
+
         let len = BigEndian::read_i32(buf);
+        buf = &buf[4..];
 
         let mut end_pos = 4;
         // len is -1 when column is null
@@ -782,7 +790,6 @@ impl DataRowColumn {
             return Err(DataRowColumnParseError::InvalidLength(len));
         }
 
-        buf = &buf[4..];
         let value = buf[..len as usize].to_vec();
         end_pos += len as usize;
 
@@ -826,8 +833,8 @@ enum DataRowBodyParseError {
 
 impl DataRowBody {
     fn parse(mut buf: &[u8]) -> Result<DataRowBody, DataRowBodyParseError> {
-        if buf.len() < 6 {
-            return Err(DataRowBodyParseError::LengthTooShort(buf.len(), 6));
+        if buf.len() < 2 {
+            return Err(DataRowBodyParseError::LengthTooShort(buf.len(), 2));
         }
 
         let num_cols = BigEndian::read_i16(buf);
@@ -897,6 +904,9 @@ impl CopyInResponseBody {
 
         let mut col_formats = Vec::with_capacity(num_cols as usize);
         for _ in 0..num_cols {
+            if buf.len() < 2 {
+                return Err(CopyInResponseBodyParseError::LengthTooShort(buf.len(), 2));
+            }
             let format = BigEndian::read_i16(buf);
             col_formats.push(format);
             buf = &buf[2..];
@@ -952,6 +962,9 @@ impl CopyOutResponseBody {
 
         let mut col_formats = Vec::with_capacity(num_cols as usize);
         for _ in 0..num_cols {
+            if buf.len() < 2 {
+                return Err(CopyOutResponseBodyParseError::LengthTooShort(buf.len(), 2));
+            }
             let format = BigEndian::read_i16(buf);
             col_formats.push(format);
             buf = &buf[2..];
@@ -1007,6 +1020,9 @@ impl CopyBothResponseBody {
 
         let mut col_formats = Vec::with_capacity(num_cols as usize);
         for _ in 0..num_cols {
+            if buf.len() < 2 {
+                return Err(CopyBothResponseBodyParseError::LengthTooShort(buf.len(), 2));
+            }
             let format = BigEndian::read_i16(buf);
             col_formats.push(format);
             buf = &buf[2..];
