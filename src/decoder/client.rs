@@ -275,7 +275,7 @@ impl SaslMessage {
                 match header.tag {
                     SASL_MESSAGE_TAG => {
                         if initial_response_sent {
-                            match ResponseBody::parse(header.payload_length(), buf) {
+                            match ResponseBody::parse(buf) {
                                 Some(body) => {
                                     Ok(Some((SaslMessage::Response(body), header.msg_length())))
                                 }
@@ -391,10 +391,8 @@ impl Display for ResponseBody {
 }
 
 impl ResponseBody {
-    fn parse(length: usize, buf: &[u8]) -> Option<ResponseBody> {
-        let data = buf[..length].to_vec();
-
-        Some(ResponseBody { data })
+    fn parse(buf: &[u8]) -> Option<ResponseBody> {
+        Some(ResponseBody { data: buf.to_vec() })
     }
 }
 
