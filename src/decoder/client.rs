@@ -89,10 +89,10 @@ impl FirstMessage {
         // First four bytes contain the length of the message.
         let length = BigEndian::read_i32(&buf[..4]) as usize;
 
-        // Length includes its own four bytes as well so it shouldn't be less than 4
-        if length < 4 {
+        // All startup messages are at least 8 bytes long
+        if length < 8 {
             buf.advance(length);
-            return Err(ParseFirstMessageError::LengthTooSmall(length, 4));
+            return Err(ParseFirstMessageError::LengthTooSmall(length, 8));
         }
 
         if buf.len() < length {
@@ -106,17 +106,28 @@ impl FirstMessage {
             return Ok(None);
         }
 
+        let payload_length = length - 8;
+        let mut payload_buf = &buf[8..];
+        payload_buf = &payload_buf[..payload_length];
+
         let typ = BigEndian::read_i32(&buf[4..8]);
+
         let res = match typ {
-            CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(length, buf)? {
-                Some(body) => Ok(Some(FirstMessage::CancelRequest(body))),
-                None => return Ok(None),
+            CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(payload_buf) {
+                Ok(body) => match body {
+                    Some(body) => Ok(Some(FirstMessage::CancelRequest(body))),
+                    None => return Ok(None),
+                },
+                Err(e) => Err(e.into()),
             },
             SSL_REQUEST_TYPE => Ok(Some(FirstMessage::SslRequest)),
             GSS_ENC_REQUEST_TYPE => Ok(Some(FirstMessage::GssEncRequest)),
-            _ => match StartupMessageBody::parse(length, typ, buf)? {
-                Some(body) => Ok(Some(FirstMessage::StartupMessage(body))),
-                None => return Ok(None),
+            _ => match StartupMessageBody::parse(typ, &payload_buf) {
+                Ok(body) => match body {
+                    Some(body) => Ok(Some(FirstMessage::StartupMessage(body))),
+                    None => return Ok(None),
+                },
+                Err(e) => Err(e.into()),
             },
         };
 
@@ -171,28 +182,17 @@ enum ParseStartupMessageBodyError {
 
 impl StartupMessageBody {
     fn parse(
-        length: usize,
         protocol_version: i32,
-        buf: &mut BytesMut,
+        buf: &[u8],
     ) -> Result<Option<StartupMessageBody>, ParseStartupMessageBodyError> {
-        if buf.len() < length {
-            return Ok(None);
-        }
-        let mut param_start = 8;
+        let mut param_start = 0;
         let mut parameters = Vec::new();
         loop {
-            let (param, end_pos) = match super::read_cstr(&buf[param_start..]) {
-                Ok(res) => res,
-                Err(e) => {
-                    buf.advance(length);
-                    return Err(e.into());
-                }
-            };
+            let (param, end_pos) = super::read_cstr(&buf[param_start..])?;
             parameters.push(param);
             param_start += end_pos;
-            if param_start >= length - 1 {
-                if buf[length - 1] != 0 {
-                    buf.advance(length);
+            if param_start >= buf.len() - 1 {
+                if buf[buf.len() - 1] != 0 {
                     return Err(ParseStartupMessageBodyError::NotNullTerminated);
                 }
                 break;
@@ -227,21 +227,14 @@ enum ParseCancelRequestBodyError {
 }
 
 impl CancelRequestBody {
-    fn parse(
-        length: usize,
-        buf: &mut BytesMut,
-    ) -> Result<Option<CancelRequestBody>, ParseCancelRequestBodyError> {
-        if length != 16 {
-            buf.advance(length);
-            return Err(ParseCancelRequestBodyError::InvalidLength(16, length));
+    fn parse(buf: &[u8]) -> Result<Option<CancelRequestBody>, ParseCancelRequestBodyError> {
+        if buf.len() != 8 {
+            return Err(ParseCancelRequestBodyError::InvalidLength(16, buf.len()));
         }
-        if buf.len() < 16 {
-            buf.reserve(length - buf.len());
-            return Ok(None);
-        }
+
         Ok(Some(CancelRequestBody {
-            process_id: BigEndian::read_i32(&buf[8..12]),
-            secret_key: BigEndian::read_i32(&buf[12..16]),
+            process_id: BigEndian::read_i32(&buf[0..4]),
+            secret_key: BigEndian::read_i32(&buf[4..8]),
         }))
     }
 }
