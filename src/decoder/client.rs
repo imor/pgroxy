@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::ReadCStrError;
+use super::{ReadCStrError, NUM_HEADER_BYTES};
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -269,31 +269,35 @@ impl SaslMessage {
         initial_response_sent: bool,
     ) -> Result<Option<(SaslMessage, usize)>, (SaslMessageParseError, usize)> {
         match super::Header::parse(buf) {
-            Some(header) => match header.tag {
-                SASL_MESSAGE_TAG => {
-                    if initial_response_sent {
-                        match ResponseBody::parse(header.length as usize, &buf[5..]) {
-                            Some(body) => {
-                                Ok(Some((SaslMessage::Response(body), header.msg_length())))
+            Some(header) => {
+                let mut buf = &buf[NUM_HEADER_BYTES..];
+                buf = &buf[..header.payload_length()];
+                match header.tag {
+                    SASL_MESSAGE_TAG => {
+                        if initial_response_sent {
+                            match ResponseBody::parse(header.payload_length(), buf) {
+                                Some(body) => {
+                                    Ok(Some((SaslMessage::Response(body), header.msg_length())))
+                                }
+                                None => Ok(None),
                             }
-                            None => Ok(None),
-                        }
-                    } else {
-                        match InitialResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.msg_length()))?
-                        {
-                            Some(body) => Ok(Some((
-                                SaslMessage::InitialResponse(body),
-                                header.msg_length(),
-                            ))),
-                            None => Ok(None),
+                        } else {
+                            match InitialResponseBody::parse(buf)
+                                .map_err(|e| (e.into(), header.msg_length()))?
+                            {
+                                Some(body) => Ok(Some((
+                                    SaslMessage::InitialResponse(body),
+                                    header.msg_length(),
+                                ))),
+                                None => Ok(None),
+                            }
                         }
                     }
+                    _ => {
+                        panic!("Invalid message with tag {}", header.tag);
+                    }
                 }
-                _ => {
-                    panic!("Invalid message with tag {}", header.tag);
-                }
-            },
+            }
             None => Ok(None),
         }
     }
@@ -328,29 +332,39 @@ impl Display for InitialResponseBody {
 
 #[derive(Error, Debug)]
 enum InitialResponseBodyParseError {
-    #[error("invalid message length {0}. It can't be less than {1}")]
-    LengthTooShort(usize, usize),
+    #[error("buffer length too short: {0}")]
+    BufferTooShort(usize),
+
+    #[error("invalid response length: {0}")]
+    InvalidResponseLength(i32),
 
     #[error("invalid mechanism: {0}")]
     InvalidMechanism(#[from] ReadCStrError),
 }
 
 impl InitialResponseBody {
-    fn parse(
-        length: usize,
-        mut buf: &[u8],
-    ) -> Result<Option<InitialResponseBody>, InitialResponseBodyParseError> {
-        if length <= 4 {
-            return Err(InitialResponseBodyParseError::LengthTooShort(length, 4));
-        }
-
+    fn parse(mut buf: &[u8]) -> Result<Option<InitialResponseBody>, InitialResponseBodyParseError> {
         let (auth_mechanism, end_pos) = super::read_cstr(buf)?;
 
         buf = &buf[end_pos..];
+
+        if buf.len() < 4 {
+            return Err(InitialResponseBodyParseError::BufferTooShort(buf.len()));
+        }
+
         let data_length = BigEndian::read_i32(buf);
-        let data = if data_length > -1 {
+        let data = if data_length > 0 {
             buf = &buf[4..];
+            if data_length as usize != buf.len() {
+                return Err(InitialResponseBodyParseError::InvalidResponseLength(
+                    data_length,
+                ));
+            }
             buf[..data_length as usize].to_vec()
+        } else if data_length < -1 {
+            return Err(InitialResponseBodyParseError::InvalidResponseLength(
+                data_length,
+            ));
         } else {
             Vec::new()
         };
@@ -378,7 +392,7 @@ impl Display for ResponseBody {
 
 impl ResponseBody {
     fn parse(length: usize, buf: &[u8]) -> Option<ResponseBody> {
-        let data = buf[..(length - 4)].to_vec();
+        let data = buf[..length].to_vec();
 
         Some(ResponseBody { data })
     }
@@ -432,7 +446,7 @@ impl SubsequentMessage {
         match super::Header::parse(buf) {
             Some(header) => match header.tag {
                 QUERY_MESSAGE_TAG => {
-                    match QueryBody::parse(&buf[5..])
+                    match QueryBody::parse(&buf[NUM_HEADER_BYTES..])
                         .map_err(|e| (e.into(), header.msg_length()))?
                     {
                         Some(query_body) => Ok(Some((
@@ -443,7 +457,10 @@ impl SubsequentMessage {
                     }
                 }
                 COPY_DATA_MESSAGE_TAG => {
-                    let body = super::CopyDataBody::parse(header.length as usize, &buf[5..]);
+                    let body = super::CopyDataBody::parse(
+                        header.length as usize,
+                        &buf[NUM_HEADER_BYTES..],
+                    );
                     Ok(Some((
                         SubsequentMessage::CopyData(body),
                         header.msg_length(),
@@ -462,7 +479,7 @@ impl SubsequentMessage {
                     Ok(Some((SubsequentMessage::Terminate, header.msg_length())))
                 }
                 _ => {
-                    let body = super::UnknownMessageBody::parse(&buf[5..], header);
+                    let body = super::UnknownMessageBody::parse(&buf[NUM_HEADER_BYTES..], header);
                     Ok(Some((
                         SubsequentMessage::Unknown(body),
                         header.msg_length(),

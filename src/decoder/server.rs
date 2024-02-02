@@ -8,7 +8,10 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, ReadCStrError};
+use super::{
+    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, ReadCStrError,
+    NUM_HEADER_BYTES,
+};
 
 #[derive(Debug)]
 pub enum ServerMessage {
@@ -144,7 +147,7 @@ impl ServerMessage {
         buf: &mut BytesMut,
     ) -> Result<Option<(ServerMessage, usize)>, (ServerMessageParseError, usize)> {
         match super::Header::parse(buf) {
-            Some(header) => Ok(Some(Self::parse_message(header, &buf[5..])?)),
+            Some(header) => Ok(Some(Self::parse_message(header, &buf[NUM_HEADER_BYTES..])?)),
             None => Ok(None),
         }
     }

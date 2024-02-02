@@ -16,6 +16,8 @@ pub struct Header {
     pub length: i32,
 }
 
+const NUM_HEADER_BYTES: usize = 5;
+
 impl Header {
     /// Parses a `Header` from the passed `buf`.
     /// Returns `None` if `buf` doesn't contain enough bytes to parse a full message.
@@ -24,7 +26,6 @@ impl Header {
     ///
     /// panics if the header length is less than 4.
     fn parse(buf: &[u8]) -> Option<Header> {
-        const NUM_HEADER_BYTES: usize = 5;
         const NUM_LENGTH_BYTES: usize = 4;
 
         if buf.len() < NUM_HEADER_BYTES {
@@ -56,6 +57,11 @@ impl Header {
     /// Returns the length of the message including the header
     fn msg_length(&self) -> usize {
         self.length as usize + 1
+    }
+
+    /// Returns the length of the message excluding the header
+    fn payload_length(&self) -> usize {
+        self.length as usize - 4
     }
 }
 
