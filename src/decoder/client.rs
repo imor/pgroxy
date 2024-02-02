@@ -273,18 +273,21 @@ impl SaslMessage {
                 SASL_MESSAGE_TAG => {
                     if initial_response_sent {
                         match ResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.skip()))?
+                            .map_err(|e| (e.into(), header.msg_length()))?
                         {
-                            Some(body) => Ok(Some((SaslMessage::Response(body), header.skip()))),
+                            Some(body) => {
+                                Ok(Some((SaslMessage::Response(body), header.msg_length())))
+                            }
                             None => Ok(None),
                         }
                     } else {
                         match InitialResponseBody::parse(header.length as usize, &buf[5..])
-                            .map_err(|e| (e.into(), header.skip()))?
+                            .map_err(|e| (e.into(), header.msg_length()))?
                         {
-                            Some(body) => {
-                                Ok(Some((SaslMessage::InitialResponse(body), header.skip())))
-                            }
+                            Some(body) => Ok(Some((
+                                SaslMessage::InitialResponse(body),
+                                header.msg_length(),
+                            ))),
                             None => Ok(None),
                         }
                     }
@@ -444,16 +447,22 @@ impl SubsequentMessage {
         match super::Header::parse(buf) {
             Some(header) => match header.tag {
                 QUERY_MESSAGE_TAG => {
-                    match QueryBody::parse(&buf[5..]).map_err(|e| (e.into(), header.skip()))? {
-                        Some(query_body) => {
-                            Ok(Some((SubsequentMessage::Query(query_body), header.skip())))
-                        }
+                    match QueryBody::parse(&buf[5..])
+                        .map_err(|e| (e.into(), header.msg_length()))?
+                    {
+                        Some(query_body) => Ok(Some((
+                            SubsequentMessage::Query(query_body),
+                            header.msg_length(),
+                        ))),
                         None => Ok(None),
                     }
                 }
                 COPY_DATA_MESSAGE_TAG => {
                     let body = super::CopyDataBody::parse(header.length as usize, &buf[5..]);
-                    Ok(Some((SubsequentMessage::CopyData(body), header.skip())))
+                    Ok(Some((
+                        SubsequentMessage::CopyData(body),
+                        header.msg_length(),
+                    )))
                 }
                 TERMINATE_MESSAGE_TAG => {
                     if header.length != 4 {
@@ -462,14 +471,17 @@ impl SubsequentMessage {
                                 4,
                                 header.length as usize,
                             ),
-                            header.skip(),
+                            header.msg_length(),
                         ));
                     }
-                    Ok(Some((SubsequentMessage::Terminate, header.skip())))
+                    Ok(Some((SubsequentMessage::Terminate, header.msg_length())))
                 }
                 _ => {
                     let body = super::UnknownMessageBody::parse(&buf[5..], header);
-                    Ok(Some((SubsequentMessage::Unknown(body), header.skip())))
+                    Ok(Some((
+                        SubsequentMessage::Unknown(body),
+                        header.msg_length(),
+                    )))
                 }
             },
             None => Ok(None),

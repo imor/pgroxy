@@ -8,7 +8,6 @@ use std::{
 };
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::BytesMut;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy)]
@@ -18,11 +17,16 @@ pub struct Header {
 }
 
 impl Header {
-    /// parses a [Header]
-    /// panic
-    /// panics if the header length is less than 4
-    fn parse(buf: &mut BytesMut) -> Option<Header> {
-        if buf.len() < 5 {
+    /// Parses a `Header` from the passed `buf`.
+    ///
+    /// # Panics
+    ///
+    /// panics if the header length is less than 4.
+    fn parse(buf: &[u8]) -> Option<Header> {
+        const NUM_HEADER_BYTES: usize = 5;
+        const NUM_LENGTH_BYTES: usize = 4;
+
+        if buf.len() < NUM_HEADER_BYTES {
             return None;
         }
 
@@ -30,27 +34,26 @@ impl Header {
         let tag = buf[0];
 
         // Bytes 1 to 4 contain the length of the message.
-        let length = BigEndian::read_i32(&buf[1..5]);
+        let length = BigEndian::read_i32(&buf[1..NUM_HEADER_BYTES]);
 
-        // Can't do much here other than panicking. Invalid length is a fatal protocol violation
-        if length < 4 {
+        // Can't do much here other than panicking. Invalid length is a fatal protocol violation.
+        if length < NUM_LENGTH_BYTES as i32 {
             panic!("invalid header length {length}. It should be greater than 4");
         }
 
-        let length = length as usize;
+        // Length of a full message including the header
+        let full_message_length = length as usize + 1;
 
         // If there's not enough data in the buffer to parse a full message, wait
-        if buf.len() < length + 1 {
+        if buf.len() < full_message_length {
             return None;
         }
 
-        Some(Header {
-            tag,
-            length: length as i32,
-        })
+        Some(Header { tag, length })
     }
 
-    fn skip(&self) -> usize {
+    /// Returns the length of the message including the header
+    fn msg_length(&self) -> usize {
         self.length as usize + 1
     }
 }
