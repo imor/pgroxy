@@ -79,9 +79,8 @@ impl Display for CopyDataBody {
 }
 
 impl CopyDataBody {
-    fn parse(length: usize, buf: &[u8]) -> CopyDataBody {
-        let data = buf[..length - 4].to_vec();
-        CopyDataBody { data }
+    fn parse(buf: &[u8]) -> CopyDataBody {
+        CopyDataBody { data: buf.to_vec() }
     }
 }
 
@@ -127,11 +126,9 @@ impl Display for UnknownMessageBody {
 
 impl UnknownMessageBody {
     fn parse(buf: &[u8], header: Header) -> UnknownMessageBody {
-        let data_length = header.length as usize - 4;
-
         UnknownMessageBody {
             header,
-            bytes: buf[..data_length].to_vec(),
+            bytes: buf.to_vec(),
         }
     }
 }

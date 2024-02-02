@@ -433,44 +433,43 @@ impl SubsequentMessage {
         buf: &mut BytesMut,
     ) -> Result<Option<(SubsequentMessage, usize)>, (SubsequentMessageParseError, usize)> {
         match super::Header::parse(buf) {
-            Some(header) => match header.tag {
-                QUERY_MESSAGE_TAG => {
-                    match QueryBody::parse(&buf[NUM_HEADER_BYTES..])
-                        .map_err(|e| (e.into(), header.msg_length()))?
-                    {
-                        Some(query_body) => Ok(Some((
-                            SubsequentMessage::Query(query_body),
+            Some(header) => {
+                let mut buf = &buf[NUM_HEADER_BYTES..];
+                buf = &buf[..header.payload_length()];
+                match header.tag {
+                    QUERY_MESSAGE_TAG => {
+                        match QueryBody::parse(buf).map_err(|e| (e.into(), header.msg_length()))? {
+                            Some(query_body) => Ok(Some((
+                                SubsequentMessage::Query(query_body),
+                                header.msg_length(),
+                            ))),
+                            None => Ok(None),
+                        }
+                    }
+                    COPY_DATA_MESSAGE_TAG => {
+                        let body = super::CopyDataBody::parse(buf);
+                        Ok(Some((
+                            SubsequentMessage::CopyData(body),
                             header.msg_length(),
-                        ))),
-                        None => Ok(None),
+                        )))
+                    }
+                    TERMINATE_MESSAGE_TAG => {
+                        let body = TerminateBody::parse(buf)
+                            .map_err(|e| (e.into(), header.msg_length()))?;
+                        Ok(Some((
+                            SubsequentMessage::Terminate(body),
+                            header.msg_length(),
+                        )))
+                    }
+                    _ => {
+                        let body = super::UnknownMessageBody::parse(buf, header);
+                        Ok(Some((
+                            SubsequentMessage::Unknown(body),
+                            header.msg_length(),
+                        )))
                     }
                 }
-                COPY_DATA_MESSAGE_TAG => {
-                    let body = super::CopyDataBody::parse(
-                        header.length as usize,
-                        &buf[NUM_HEADER_BYTES..],
-                    );
-                    Ok(Some((
-                        SubsequentMessage::CopyData(body),
-                        header.msg_length(),
-                    )))
-                }
-                TERMINATE_MESSAGE_TAG => {
-                    let body = TerminateBody::parse(&buf[NUM_HEADER_BYTES..])
-                        .map_err(|e| (e.into(), header.msg_length()))?;
-                    Ok(Some((
-                        SubsequentMessage::Terminate(body),
-                        header.msg_length(),
-                    )))
-                }
-                _ => {
-                    let body = super::UnknownMessageBody::parse(&buf[NUM_HEADER_BYTES..], header);
-                    Ok(Some((
-                        SubsequentMessage::Unknown(body),
-                        header.msg_length(),
-                    )))
-                }
-            },
+            }
             None => Ok(None),
         }
     }

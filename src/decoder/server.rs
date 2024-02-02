@@ -193,7 +193,8 @@ impl ServerMessage {
                 Ok((ServerMessage::DataRow(body), header.msg_length()))
             }
             COPY_DATA_MESSAGE_TAG => {
-                let body = CopyDataBody::parse(header.length as usize, buf);
+                let buf = &buf[..header.payload_length()];
+                let body = CopyDataBody::parse(buf);
                 Ok((ServerMessage::CopyData(body), header.msg_length()))
             }
             COPY_IN_MESSAGE_TAG => {
