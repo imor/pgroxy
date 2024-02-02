@@ -495,6 +495,12 @@ enum ParameterStatusBodyParseError {
 
     #[error("invalid parameter value: {0}")]
     InvalidParamValue(ReadCStrError),
+
+    #[error("invalid message length {0}. It can't be smaller than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("trailing bytes after query string")]
+    TrailingBytes,
 }
 
 impl ParameterStatusBody {
@@ -505,12 +511,24 @@ impl ParameterStatusBody {
                 return Err(ParameterStatusBodyParseError::InvalidParamName(e));
             }
         };
-        let (param_value, _) = match super::read_cstr(&buf[end_pos..]) {
+
+        if end_pos >= buf.len() {
+            return Err(ParameterStatusBodyParseError::LengthTooShort(
+                buf.len(),
+                buf.len() + 1,
+            ));
+        }
+
+        let (param_value, end_pos) = match super::read_cstr(&buf[end_pos..]) {
             Ok(res) => res,
             Err(e) => {
                 return Err(ParameterStatusBodyParseError::InvalidParamValue(e));
             }
         };
+
+        if end_pos != buf.len() {
+            return Err(ParameterStatusBodyParseError::TrailingBytes);
+        }
 
         Ok(ParameterStatusBody {
             param_name,
