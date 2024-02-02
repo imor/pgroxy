@@ -394,7 +394,7 @@ impl ResponseBody {
 pub enum SubsequentMessage {
     Query(QueryBody),
     CopyData(super::CopyDataBody),
-    Terminate,
+    Terminate(TerminateBody),
     Unknown(super::UnknownMessageBody),
 }
 
@@ -403,10 +403,7 @@ impl Display for SubsequentMessage {
         match self {
             SubsequentMessage::Query(query) => write!(f, "{query}"),
             SubsequentMessage::CopyData(body) => write!(f, "{body}"),
-            SubsequentMessage::Terminate => {
-                writeln!(f)?;
-                writeln!(f, "  Type: Terminate")
-            }
+            SubsequentMessage::Terminate(body) => write!(f, "{body}"),
             SubsequentMessage::Unknown(body) => write!(f, "{body}"),
         }
     }
@@ -414,8 +411,8 @@ impl Display for SubsequentMessage {
 
 #[derive(Error, Debug)]
 enum SubsequentMessageParseError {
-    #[error("invalid message length {0}. It should be {1}")]
-    InvalidTerminateLength(usize, usize),
+    #[error("terminate body parse error: {0}")]
+    TerminateBody(#[from] TerminateBodyParseError),
 
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
@@ -459,16 +456,12 @@ impl SubsequentMessage {
                     )))
                 }
                 TERMINATE_MESSAGE_TAG => {
-                    if header.length != 4 {
-                        return Err((
-                            SubsequentMessageParseError::InvalidTerminateLength(
-                                4,
-                                header.length as usize,
-                            ),
-                            header.msg_length(),
-                        ));
-                    }
-                    Ok(Some((SubsequentMessage::Terminate, header.msg_length())))
+                    let body = TerminateBody::parse(&buf[NUM_HEADER_BYTES..])
+                        .map_err(|e| (e.into(), header.msg_length()))?;
+                    Ok(Some((
+                        SubsequentMessage::Terminate(body),
+                        header.msg_length(),
+                    )))
                 }
                 _ => {
                     let body = super::UnknownMessageBody::parse(&buf[NUM_HEADER_BYTES..], header);
@@ -514,6 +507,31 @@ impl QueryBody {
         }
 
         Ok(Some(QueryBody { query }))
+    }
+}
+
+#[derive(Debug)]
+pub struct TerminateBody;
+
+impl Display for TerminateBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: Terminate")
+    }
+}
+
+#[derive(Error, Debug)]
+enum TerminateBodyParseError {
+    #[error("invalid message length {0}. It should be {1}")]
+    InvalidLength(usize, usize),
+}
+
+impl TerminateBody {
+    fn parse(buf: &[u8]) -> Result<TerminateBody, TerminateBodyParseError> {
+        if !buf.is_empty() {
+            return Err(TerminateBodyParseError::InvalidLength(buf.len(), 0));
+        }
+        Ok(TerminateBody)
     }
 }
 
