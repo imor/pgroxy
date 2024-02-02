@@ -436,7 +436,7 @@ impl Md5Body {
             return Err(Md5BodyParseError::InvalidLength(buf.len(), 4));
         }
 
-        let salt: [u8; 4] = buf.try_into().unwrap();
+        let salt: [u8; 4] = buf.try_into().expect("buf has length 4");
         Ok(Md5Body { salt })
     }
 }
