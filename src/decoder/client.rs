@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{HeaderParseError, ReadCStrError, MAX_ALLOWED_MESSAGE_LENGTH};
+use super::ReadCStrError;
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -66,9 +66,6 @@ enum ParseFirstMessageError {
     #[error("invalid message length {0}. It can't be less than {1}")]
     LengthTooSmall(usize, usize),
 
-    #[error("invalid message length {0}. It can't be greater than {1}")]
-    LengthTooLarge(usize, usize),
-
     #[error("invalid startup message: {0}")]
     Startup(#[from] ParseStartupMessageBodyError),
 
@@ -96,16 +93,6 @@ impl FirstMessage {
         if length < 4 {
             buf.advance(length);
             return Err(ParseFirstMessageError::LengthTooSmall(length, 4));
-        }
-
-        // Check that the length is not too large to avoid a denial of
-        // service attack where the proxy runs out of memory.
-        if length > super::MAX_ALLOWED_MESSAGE_LENGTH {
-            buf.advance(length);
-            return Err(ParseFirstMessageError::LengthTooLarge(
-                length,
-                MAX_ALLOWED_MESSAGE_LENGTH,
-            ));
         }
 
         if buf.len() < length {
@@ -281,7 +268,7 @@ impl SaslMessage {
         buf: &mut BytesMut,
         initial_response_sent: bool,
     ) -> Result<Option<(SaslMessage, usize)>, (SaslMessageParseError, usize)> {
-        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+        match super::Header::parse(buf) {
             Some(header) => match header.tag {
                 SASL_MESSAGE_TAG => {
                     if initial_response_sent {
@@ -313,9 +300,6 @@ impl SaslMessage {
 
 #[derive(Error, Debug)]
 enum SaslMessageParseError {
-    #[error("header parse error: {0}")]
-    Header(#[from] HeaderParseError),
-
     #[error("sasl initial response parse error: {0}")]
     InitialResponse(#[from] InitialResponseBodyParseError),
 
@@ -439,9 +423,6 @@ enum SubsequentMessageParseError {
     #[error("invalid message length {0}. It should be {1}")]
     InvalidTerminateLength(usize, usize),
 
-    #[error("header parse error: {0}")]
-    Header(#[from] HeaderParseError),
-
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
 }
@@ -460,7 +441,7 @@ impl SubsequentMessage {
     fn parse(
         buf: &mut BytesMut,
     ) -> Result<Option<(SubsequentMessage, usize)>, (SubsequentMessageParseError, usize)> {
-        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+        match super::Header::parse(buf) {
             Some(header) => match header.tag {
                 QUERY_MESSAGE_TAG => {
                     match QueryBody::parse(&buf[5..]).map_err(|e| (e.into(), header.skip()))? {

@@ -8,10 +8,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{
-    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, HeaderParseError,
-    ReadCStrError,
-};
+use super::{read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, ReadCStrError};
 
 #[derive(Debug)]
 pub enum ServerMessage {
@@ -56,9 +53,6 @@ impl Display for ServerMessage {
 
 #[derive(Error, Debug)]
 enum ServerMessageParseError {
-    #[error("invalid header: {0}")]
-    Header(#[from] HeaderParseError),
-
     #[error("invalid ssl response: {0}")]
     Ssl(#[from] SslResponseParseError),
 
@@ -149,7 +143,7 @@ impl ServerMessage {
     fn parse_header_and_message(
         buf: &mut BytesMut,
     ) -> Result<Option<(ServerMessage, usize)>, (ServerMessageParseError, usize)> {
-        match super::Header::parse(buf).map_err(|e| (e.into(), 0))? {
+        match super::Header::parse(buf) {
             Some(header) => Ok(Some(Self::parse_message(header, &buf[5..])?)),
             None => Ok(None),
         }

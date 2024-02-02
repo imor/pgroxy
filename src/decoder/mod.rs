@@ -8,10 +8,8 @@ use std::{
 };
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use thiserror::Error;
-
-const MAX_ALLOWED_MESSAGE_LENGTH: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header {
@@ -19,51 +17,37 @@ pub struct Header {
     pub length: i32,
 }
 
-#[derive(Error, Debug)]
-enum HeaderParseError {
-    #[error("invalid message length {0}. It can't be less than {1}")]
-    LengthTooShort(usize, usize),
-
-    #[error("invalid message length {0}. It can't be greater than {1}")]
-    LengthTooLong(usize, usize),
-}
-
 impl Header {
-    fn parse(buf: &mut BytesMut) -> Result<Option<Header>, HeaderParseError> {
+    /// parses a [Header]
+    /// panic
+    /// panics if the header length is less than 4
+    fn parse(buf: &mut BytesMut) -> Option<Header> {
         if buf.len() < 5 {
-            return Ok(None);
+            return None;
         }
 
         // First byte contains the tag
         let tag = buf[0];
 
         // Bytes 1 to 4 contain the length of the message.
-        let length = BigEndian::read_i32(&buf[1..5]) as usize;
+        let length = BigEndian::read_i32(&buf[1..5]);
 
-        // Length includes its own four bytes as well so it shouldn't be less than 5
+        // Can't do much here other than panicking. Invalid length is a fatal protocol violation
         if length < 4 {
-            buf.advance(length + 1);
-            return Err(HeaderParseError::LengthTooShort(length, 4));
+            panic!("invalid header length {length}. It should be greater than 4");
         }
 
-        // Check that the length is not too large to avoid a denial of
-        // service attack where the proxy runs out of memory.
-        if length > MAX_ALLOWED_MESSAGE_LENGTH {
-            buf.advance(length + 1);
-            return Err(HeaderParseError::LengthTooLong(
-                length,
-                MAX_ALLOWED_MESSAGE_LENGTH,
-            ));
-        }
+        let length = length as usize;
 
+        // If there's not enough data in the buffer to parse a full message, wait
         if buf.len() < length + 1 {
-            return Ok(None);
+            return None;
         }
 
-        Ok(Some(Header {
+        Some(Header {
             tag,
             length: length as i32,
-        }))
+        })
     }
 
     fn skip(&self) -> usize {
