@@ -1139,6 +1139,30 @@ pub struct ErrorResponseBody {
     pub fields: Vec<ErrorField>,
 }
 
+fn message_field(field_code: u8) -> &'static str {
+    match field_code {
+        b'S' => "Severity",
+        b'V' => "Severity",
+        b'C' => "Code",
+        b'M' => "Message",
+        b'D' => "Detail",
+        b'H' => "Hint",
+        b'P' => "Position",
+        b'p' => "Internal Position",
+        b'q' => "Internal Query",
+        b'W' => "Where",
+        b's' => "Schema",
+        b't' => "Table",
+        b'c' => "Column",
+        b'd' => "Data Type",
+        b'n' => "Constraint",
+        b'F' => "File",
+        b'L' => "Line",
+        b'R' => "Routine",
+        _ => "Unknown",
+    }
+}
+
 impl Display for ErrorResponseBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
@@ -1147,7 +1171,8 @@ impl Display for ErrorResponseBody {
             writeln!(
                 f,
                 "  Field: code = {}, value = {}",
-                field.code as char, field.value
+                message_field(field.code),
+                field.value
             )?;
         }
         Ok(())
