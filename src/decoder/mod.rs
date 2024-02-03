@@ -203,6 +203,9 @@ pub fn create_decoders() -> (client::ClientMessageDecoder, server::ServerMessage
     let client_msg_decoder = client::ClientMessageDecoder {
         protocol_state: Arc::clone(&protocol_state),
     };
-    let server_msg_decoder = server::ServerMessageDecoder { protocol_state };
+    let server_msg_decoder = server::ServerMessageDecoder {
+        protocol_state,
+        row_description: None,
+    };
     (client_msg_decoder, server_msg_decoder)
 }

@@ -114,26 +114,24 @@ impl FirstMessage {
 
         let typ = BigEndian::read_i32(&buf[4..8]);
 
-        let res = match typ {
+        match typ {
             CANCEL_REQUEST_TYPE => match CancelRequestBody::parse(payload_buf) {
                 Ok(body) => match body {
                     Some(body) => Ok(Some((FirstMessage::CancelRequest(body), length))),
-                    None => return Ok(None),
+                    None => Ok(None),
                 },
                 Err(e) => Err((e.into(), length)),
             },
             SSL_REQUEST_TYPE => Ok(Some((FirstMessage::SslRequest, length))),
             GSS_ENC_REQUEST_TYPE => Ok(Some((FirstMessage::GssEncRequest, length))),
-            _ => match StartupMessageBody::parse(typ, &payload_buf) {
+            _ => match StartupMessageBody::parse(typ, payload_buf) {
                 Ok(body) => match body {
                     Some(body) => Ok(Some((FirstMessage::StartupMessage(body), length))),
-                    None => return Ok(None),
+                    None => Ok(None),
                 },
                 Err(e) => Err((e.into(), length)),
             },
-        };
-
-        res
+        }
     }
 }
 

@@ -42,7 +42,7 @@ impl Display for ServerMessage {
             ServerMessage::ReadyForQuery(body) => write!(f, "{body}"),
             ServerMessage::RowDescription(body) => write!(f, "{body}"),
             ServerMessage::CommandComplete(body) => write!(f, "{body}"),
-            ServerMessage::DataRow(body) => write!(f, "{body}"),
+            ServerMessage::DataRow(_) => panic!("use DataRowBodyFormatter"),
             ServerMessage::CopyData(body) => write!(f, "{body}"),
             ServerMessage::CopyIn(body) => write!(f, "{body}"),
             ServerMessage::CopyOut(body) => write!(f, "{body}"),
@@ -683,7 +683,7 @@ impl ReadyForQueryBody {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RowDescriptionField {
     pub name: String,
     pub oid: i32,
@@ -734,7 +734,7 @@ impl RowDescriptionField {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RowDescriptionBody {
     pub fields: Vec<RowDescriptionField>,
 }
@@ -878,12 +878,35 @@ pub struct DataRowBody {
     pub columns: Vec<DataRowColumn>,
 }
 
-impl Display for DataRowBody {
+pub struct DataRowBodyFormatter<'a> {
+    pub data_row_body: &'a DataRowBody,
+    pub row_description_body: &'a Option<RowDescriptionBody>,
+}
+
+impl Display for DataRowBodyFormatter<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: DataRow")?;
-        for column in &self.columns {
-            writeln!(f, "  Column: value = {:?}", column.value)?;
+        if let Some(row_desc) = self.row_description_body {
+            debug_assert!(self.data_row_body.columns.len() == row_desc.fields.len());
+            for (i, column) in self.data_row_body.columns.iter().enumerate() {
+                let field = &row_desc.fields[i];
+                if field.format == 0 {
+                    // text
+                    if let Ok(value) = std::str::from_utf8(&column.value) {
+                        writeln!(f, "  Column: value = {value}")?;
+                    } else {
+                        writeln!(f, "  Column: value = {:?}", column.value)?;
+                    }
+                } else {
+                    // binary or unknown
+                    writeln!(f, "  Column: value = {:?}", column.value)?;
+                }
+            }
+        } else {
+            for column in &self.data_row_body.columns {
+                writeln!(f, "  Column: value = {:?}", column.value)?;
+            }
         }
         Ok(())
     }
@@ -1113,7 +1136,7 @@ pub struct ErrorField {
 
 impl ErrorField {
     fn parse(mut buf: &[u8]) -> Result<(ErrorField, usize), ErrorResponseBodyParseError> {
-        if buf.len() < 1 {
+        if buf.is_empty() {
             return Err(ErrorResponseBodyParseError::LengthTooShort(buf.len(), 1));
         }
 
@@ -1205,6 +1228,13 @@ impl ErrorResponseBody {
 
 pub struct ServerMessageDecoder {
     pub(super) protocol_state: Arc<Mutex<super::ProtocolState>>,
+    pub(super) row_description: Option<RowDescriptionBody>,
+}
+
+impl ServerMessageDecoder {
+    pub fn row_description(&mut self) -> &Option<RowDescriptionBody> {
+        &self.row_description
+    }
 }
 
 impl Decoder for ServerMessageDecoder {
@@ -1246,6 +1276,9 @@ impl Decoder for ServerMessageDecoder {
                         if matches!(*state, super::ProtocolState::AuthenticatingSasl(_)) {
                             *state = super::ProtocolState::Initial
                         }
+                    }
+                    ServerMessage::RowDescription(ref body) => {
+                        self.row_description = Some(body.clone())
                     }
                     _ => {}
                 }

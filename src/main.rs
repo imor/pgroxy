@@ -3,6 +3,7 @@ mod decoder;
 use std::sync::atomic::AtomicU8;
 
 use bytes::BytesMut;
+use decoder::server::{DataRowBodyFormatter, ServerMessage};
 use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -70,7 +71,17 @@ impl HalfSession for UpstreamToClientSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => println!("← [{}] {msg}", self.session_id),
+                Ok(Some(msg)) => {
+                    if let ServerMessage::DataRow(ref row) = msg {
+                        let formatter = DataRowBodyFormatter {
+                            data_row_body: row,
+                            row_description_body: self.decoder.row_description(),
+                        };
+                        println!("← [{}] {formatter}", self.session_id)
+                    } else {
+                        println!("← [{}] {msg}", self.session_id)
+                    }
+                }
                 Ok(None) => {
                     break;
                 }
@@ -101,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("→ [{session_id}] Received a client connection from {client_addr}");
 
         tokio::spawn(async move {
-            let upstream_addr = "127.0.0.1:5433";
+            let upstream_addr = "127.0.0.1:5432";
             // let upstream_addr = "127.0.0.1:5431";
             let mut upstream = match TcpStream::connect(upstream_addr).await {
                 Ok(upstream) => upstream,
