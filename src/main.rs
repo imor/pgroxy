@@ -3,9 +3,10 @@ mod decoder;
 use std::sync::atomic::AtomicU8;
 
 use bytes::BytesMut;
+use clap::Parser;
 use decoder::server::{DataRowBodyFormatter, ServerMessage};
 use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
-use futures::{future, FutureExt};
+use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
@@ -101,43 +102,61 @@ impl HalfSession for UpstreamToClientSession {
 
 static LAST_SESSION_ID: AtomicU8 = AtomicU8::new(0);
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Addresses to listen at in the <ip>:<port> format
+    #[arg(short, long)]
+    listen: Vec<String>,
+
+    /// Upstream address to connect to
+    #[arg(short, long)]
+    connect: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr4 = "127.0.0.1:8080";
-    let addr6 = "[::]:8080";
-    let listener4 = TcpListener::bind(addr4).await?;
-    let listener6 = TcpListener::bind(addr6).await?;
-    println!("👂Listening on {addr4}");
-    println!("👂Listening on {addr6}");
+    let args = Args::parse();
 
-    let result4 = tokio::spawn(async {
-        handle_connection(listener4)
-            .await
-            .expect("failed to handle connection");
-    });
-    let result6 = tokio::spawn(async {
-        handle_connection(listener6)
-            .await
-            .expect("failed to handle connection");
-    });
+    if args.listen.is_empty() {
+        eprintln!("At least one listen address must be specified");
+        return Ok(());
+    }
 
-    let (result4, result6) = future::join(result4, result6).await;
+    let Args { listen, connect } = args;
 
-    result4?;
-    result6?;
+    let mut handles = vec![];
+    for addr in &listen {
+        let listener = TcpListener::bind(addr).await?;
+        println!("👂Listening on {addr}");
+        let connect = connect.clone();
+        let result = tokio::spawn(async {
+            handle_connection(listener, connect)
+                .await
+                .expect("failed to handle connection for address {addr}");
+        });
+        handles.push(result);
+    }
+
+    for handle in handles {
+        handle.await?;
+    }
 
     Ok(())
 }
 
-async fn handle_connection(listener6: TcpListener) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_connection(
+    listener6: TcpListener,
+    upstream_addr: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (mut client, client_addr) = listener6.accept().await?;
         let session_id = LAST_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         println!("→ [{session_id}] Received a client connection from {client_addr}");
 
+        let upstream_addr = upstream_addr.to_string();
+
         tokio::spawn(async move {
-            let upstream_addr = "127.0.0.1:5432";
-            // let upstream_addr = "127.0.0.1:5431";
             let mut upstream = match TcpStream::connect(upstream_addr).await {
                 Ok(upstream) => upstream,
                 Err(e) => {
