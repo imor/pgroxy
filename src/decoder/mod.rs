@@ -1,4 +1,5 @@
 pub mod client;
+pub mod replication;
 pub mod server;
 
 use std::{
@@ -9,6 +10,8 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use thiserror::Error;
+
+use self::replication::{XLogDataBody, XLogDataBodyParseError};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header {
@@ -66,20 +69,93 @@ impl Header {
 
 #[derive(Debug)]
 pub struct CopyDataBody {
-    data: Vec<u8>,
+    contents: CopyDataBodyContents,
+}
+
+#[derive(Error, Debug)]
+pub enum CopyDataBodyParseError {
+    #[error("invalid copy data body contents: {0}")]
+    InvalidContents(#[from] CopyDataBodyContentsParseError),
 }
 
 impl Display for CopyDataBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: CopyData")?;
-        writeln!(f, "  Data: {:?}", self.data)
+        writeln!(f, "{}", self.contents)
     }
 }
 
 impl CopyDataBody {
-    fn parse(buf: &[u8]) -> CopyDataBody {
-        CopyDataBody { data: buf.to_vec() }
+    fn parse(
+        buf: &[u8],
+        replication_type: Option<ReplicationType>,
+    ) -> Result<CopyDataBody, CopyDataBodyParseError> {
+        let contents = CopyDataBodyContents::parse(buf, replication_type)?;
+        Ok(CopyDataBody { contents })
+    }
+}
+
+#[derive(Debug)]
+pub enum CopyDataBodyContents {
+    XLogData(XLogDataBody),
+    // PrimaryKeepalive(PrimaryKeepaliveBody),
+    // StandbyStatusUpdate(StandbyStatusUpdateBody),
+    // HotStandbyFeedback(HotStandbyFeedbackBody),
+    Raw(char, Vec<u8>),
+}
+
+impl Display for CopyDataBodyContents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CopyDataBodyContents::XLogData(data) => {
+                writeln!(f, "{}", data)
+            }
+            CopyDataBodyContents::Raw(tag, data) => {
+                writeln!(f, "  Tag: {tag}")?;
+                writeln!(f, "  RawData: {data:?}")
+            }
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum CopyDataBodyContentsParseError {
+    #[error("invalid message length {0}. It can't be smaller than {1}")]
+    LengthTooShort(usize, usize),
+
+    #[error("XLogData message while not replicating")]
+    UnexpectedXLogData,
+
+    #[error("XLogData parse error")]
+    XLogDataParseError(#[from] XLogDataBodyParseError),
+}
+
+const XLOG_DATA_MESSAGE_TAG: u8 = b'w';
+
+impl CopyDataBodyContents {
+    fn parse(
+        buf: &[u8],
+        replication_type: Option<ReplicationType>,
+    ) -> Result<CopyDataBodyContents, CopyDataBodyContentsParseError> {
+        if buf.is_empty() {
+            return Err(CopyDataBodyContentsParseError::LengthTooShort(buf.len(), 1));
+        }
+
+        let tag = buf[0];
+        match tag {
+            XLOG_DATA_MESSAGE_TAG => {
+                let Some(replication_type) = replication_type else {
+                    return Err(CopyDataBodyContentsParseError::UnexpectedXLogData);
+                };
+
+                Ok(CopyDataBodyContents::XLogData(XLogDataBody::parse(
+                    &buf[1..],
+                    replication_type,
+                )?))
+            }
+            tag => Ok(CopyDataBodyContents::Raw(tag as char, buf[1..].to_vec())),
+        }
     }
 }
 
@@ -169,11 +245,19 @@ fn read_cstr(buf: &[u8]) -> Result<(String, usize), ReadCStrError> {
 }
 
 #[derive(Clone, Copy)]
+pub enum ReplicationType {
+    Logical,
+    Physical,
+}
+
+#[derive(Clone, Copy)]
 enum ProtocolState {
     Initial,
     NegotiatingSsl,
     StartupDone,
     AuthenticatingSasl(bool),
+    RequestedReplication(ReplicationType),
+    Replicating(ReplicationType),
 }
 
 impl ProtocolState {
@@ -194,6 +278,16 @@ impl ProtocolState {
             *sent
         } else {
             panic!("call this method only when authenticating sasl")
+        }
+    }
+
+    pub fn replication_type(&self) -> Option<ReplicationType> {
+        match self {
+            ProtocolState::Replicating(ReplicationType::Logical) => Some(ReplicationType::Logical),
+            ProtocolState::Replicating(ReplicationType::Physical) => {
+                Some(ReplicationType::Physical)
+            }
+            _ => None,
         }
     }
 }

@@ -9,7 +9,7 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
 
-use super::{ReadCStrError, NUM_HEADER_BYTES};
+use super::{CopyDataBodyParseError, ReadCStrError, ReplicationType, NUM_HEADER_BYTES};
 
 #[derive(Debug)]
 pub enum ClientMessage {
@@ -421,6 +421,9 @@ enum SubsequentMessageParseError {
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
 
+    #[error("copy data body parse error: {0}")]
+    CopyData(#[from] CopyDataBodyParseError),
+
     #[error("copy fail body parse error: {0}")]
     CopyFail(#[from] CopyFailBodyParseError),
 }
@@ -440,6 +443,7 @@ const SYNC_MESSAGE_TAG: u8 = b'S';
 impl SubsequentMessage {
     fn parse(
         buf: &mut BytesMut,
+        replication_type: Option<ReplicationType>,
     ) -> Result<Option<(SubsequentMessage, usize)>, (SubsequentMessageParseError, usize)> {
         match super::Header::parse(buf) {
             Some(header) => {
@@ -456,7 +460,8 @@ impl SubsequentMessage {
                         }
                     }
                     COPY_DATA_MESSAGE_TAG => {
-                        let body = super::CopyDataBody::parse(buf);
+                        let body = super::CopyDataBody::parse(buf, replication_type)
+                            .map_err(|e| (e.into(), header.msg_length()))?;
                         Ok(Some((
                             SubsequentMessage::CopyData(body),
                             header.msg_length(),
@@ -519,6 +524,12 @@ enum QueryBodyParseError {
     TrailingBytes,
 }
 
+enum QueryType {
+    LogicalReplication,
+    PhysicalReplication,
+    Other,
+}
+
 impl QueryBody {
     fn parse(buf: &[u8]) -> Result<Option<QueryBody>, QueryBodyParseError> {
         let (query, end_pos) = super::read_cstr(buf)?;
@@ -528,6 +539,54 @@ impl QueryBody {
         }
 
         Ok(Some(QueryBody { query }))
+    }
+
+    fn query_type(&self) -> QueryType {
+        fn is_whitespace(c: char) -> bool {
+            c == ' ' || c == '\t' || c == '\r' || c == '\n'
+        }
+
+        fn not_whitespace(c: char) -> bool {
+            !is_whitespace(c)
+        }
+
+        fn skip_while<F>(query: &str, f: F) -> usize
+        where
+            F: Fn(char) -> bool,
+        {
+            for (i, c) in query.char_indices() {
+                if !f(c) {
+                    return i;
+                }
+            }
+
+            query.len()
+        }
+
+        fn get_token(query: &str) -> (String, &str) {
+            let whitespace_end = skip_while(query, is_whitespace);
+            let query = &query[whitespace_end..];
+            let token_end = skip_while(query, not_whitespace);
+            let token = (&query[..token_end]).to_lowercase();
+            (token, &query[whitespace_end + token_end..])
+        }
+
+        let query = self.query.as_str();
+        let (token, query) = get_token(query);
+
+        if token == "start_replication" {
+            let (token, query) = get_token(query);
+            if token == "slot" {
+                let (_slot_name, query) = get_token(query);
+                let (token, _query) = get_token(query);
+                if token == "logical" {
+                    return QueryType::LogicalReplication;
+                }
+            }
+            return QueryType::PhysicalReplication;
+        }
+
+        QueryType::Other
     }
 }
 
@@ -621,9 +680,27 @@ impl Decoder for ClientMessageDecoder {
             .lock()
             .expect("failed to lock protocol_state");
         let (res, skip) = if state.startup_done() {
-            match SubsequentMessage::parse(buf) {
+            match SubsequentMessage::parse(buf, state.replication_type()) {
                 Ok(msg) => match msg {
-                    Some((msg, skip)) => (Ok(Some(ClientMessage::Subsequent(msg))), skip),
+                    Some((msg, skip)) => {
+                        match &msg {
+                            SubsequentMessage::Query(query) => match query.query_type() {
+                                QueryType::LogicalReplication => {
+                                    *state = super::ProtocolState::RequestedReplication(
+                                        super::ReplicationType::Logical,
+                                    );
+                                }
+                                QueryType::PhysicalReplication => {
+                                    *state = super::ProtocolState::RequestedReplication(
+                                        super::ReplicationType::Physical,
+                                    );
+                                }
+                                QueryType::Other => {}
+                            },
+                            _ => {}
+                        }
+                        (Ok(Some(ClientMessage::Subsequent(msg))), skip)
+                    }
                     None => (Ok(None), 0),
                 },
                 Err((e, skip)) => (Err(e.into()), skip),

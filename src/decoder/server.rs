@@ -9,8 +9,8 @@ use thiserror::Error;
 use tokio_util::codec::Decoder;
 
 use super::{
-    read_cstr, CopyDataBody, CopyDoneBody, CopyDoneBodyParseError, Header, ReadCStrError,
-    NUM_HEADER_BYTES,
+    read_cstr, CopyDataBody, CopyDataBodyParseError, CopyDoneBody, CopyDoneBodyParseError, Header,
+    ReadCStrError, ReplicationType, NUM_HEADER_BYTES,
 };
 
 #[derive(Debug)]
@@ -89,6 +89,9 @@ enum ServerMessageParseError {
     #[error("invalid copy done message: {0}")]
     CopyDone(#[from] CopyDoneBodyParseError),
 
+    #[error("copy data body parse error: {0}")]
+    CopyData(#[from] CopyDataBodyParseError),
+
     #[error("invalid error response message: {0}")]
     Error(#[from] ErrorResponseBodyParseError),
 
@@ -120,6 +123,7 @@ impl ServerMessage {
     fn parse(
         buf: &mut BytesMut,
         expecting_ssl_response: bool,
+        replication_type: Option<ReplicationType>,
     ) -> Result<Option<ServerMessage>, ServerMessageParseError> {
         if expecting_ssl_response {
             match SslResponse::parse(buf)? {
@@ -127,7 +131,7 @@ impl ServerMessage {
                 None => Ok(None),
             }
         } else {
-            match Self::parse_header_and_message(buf) {
+            match Self::parse_header_and_message(buf, replication_type) {
                 Ok(msg) => match msg {
                     Some((msg, skip)) => {
                         buf.advance(skip);
@@ -145,9 +149,10 @@ impl ServerMessage {
 
     fn parse_header_and_message(
         buf: &mut BytesMut,
+        replication_type: Option<ReplicationType>,
     ) -> Result<Option<(ServerMessage, usize)>, (ServerMessageParseError, usize)> {
         match super::Header::parse(buf) {
-            Some(header) => Ok(Some(Self::parse_message(header, buf)?)),
+            Some(header) => Ok(Some(Self::parse_message(header, buf, replication_type)?)),
             None => Ok(None),
         }
     }
@@ -155,6 +160,7 @@ impl ServerMessage {
     fn parse_message(
         header: Header,
         mut buf: &[u8],
+        replication_type: Option<ReplicationType>,
     ) -> Result<(ServerMessage, usize), (ServerMessageParseError, usize)> {
         buf = &buf[NUM_HEADER_BYTES..];
         buf = &buf[..header.payload_length()];
@@ -194,7 +200,8 @@ impl ServerMessage {
                 Ok((ServerMessage::DataRow(body), header.msg_length()))
             }
             COPY_DATA_MESSAGE_TAG => {
-                let body = CopyDataBody::parse(buf);
+                let body = CopyDataBody::parse(buf, replication_type)
+                    .map_err(|e| (e.into(), header.msg_length()))?;
                 Ok((ServerMessage::CopyData(body), header.msg_length()))
             }
             COPY_IN_MESSAGE_TAG => {
@@ -1246,7 +1253,11 @@ impl Decoder for ServerMessageDecoder {
             .protocol_state
             .lock()
             .expect("failed to lock protocol_state");
-        match ServerMessage::parse(buf, state.expecting_ssl_response())? {
+        match ServerMessage::parse(
+            buf,
+            state.expecting_ssl_response(),
+            state.replication_type(),
+        )? {
             Some(msg) => {
                 match msg {
                     ServerMessage::Authentication(ref auth_req) => match auth_req {
@@ -1275,11 +1286,28 @@ impl Decoder for ServerMessageDecoder {
                     ServerMessage::Error(_) => {
                         if matches!(*state, super::ProtocolState::AuthenticatingSasl(_)) {
                             *state = super::ProtocolState::Initial
+                        } else if matches!(*state, super::ProtocolState::RequestedReplication(_)) {
+                            *state = super::ProtocolState::StartupDone
                         }
                     }
                     ServerMessage::RowDescription(ref body) => {
                         self.row_description = Some(body.clone())
                     }
+                    ServerMessage::CopyBoth(_) => match *state {
+                        super::ProtocolState::RequestedReplication(
+                            super::ReplicationType::Logical,
+                        ) => {
+                            *state =
+                                super::ProtocolState::Replicating(super::ReplicationType::Logical)
+                        }
+                        super::ProtocolState::RequestedReplication(
+                            super::ReplicationType::Physical,
+                        ) => {
+                            *state =
+                                super::ProtocolState::Replicating(super::ReplicationType::Physical)
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 }
                 Ok(Some(msg))
