@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    str::{from_utf8, Utf8Error},
     sync::{Arc, Mutex},
 };
 
@@ -390,6 +391,7 @@ impl ResponseBody {
 pub enum SubsequentMessage {
     Query(QueryBody),
     CopyData(super::CopyDataBody),
+    CopyFail(CopyFailBody),
     Terminate(TerminateBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -399,6 +401,7 @@ impl Display for SubsequentMessage {
         match self {
             SubsequentMessage::Query(query) => write!(f, "{query}"),
             SubsequentMessage::CopyData(body) => write!(f, "{body}"),
+            SubsequentMessage::CopyFail(body) => write!(f, "{body}"),
             SubsequentMessage::Terminate(body) => write!(f, "{body}"),
             SubsequentMessage::Unknown(body) => write!(f, "{body}"),
         }
@@ -412,6 +415,9 @@ enum SubsequentMessageParseError {
 
     #[error("query body parse error: {0}")]
     QueryBody(#[from] QueryBodyParseError),
+
+    #[error("copy fail body parse error: {0}")]
+    CopyFail(#[from] CopyFailBodyParseError),
 }
 
 impl From<SubsequentMessageParseError> for std::io::Error {
@@ -423,6 +429,7 @@ impl From<SubsequentMessageParseError> for std::io::Error {
 const QUERY_MESSAGE_TAG: u8 = b'Q';
 const TERMINATE_MESSAGE_TAG: u8 = b'X';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
+const COPY_FAIL_MESSAGE_TAG: u8 = b'f';
 
 impl SubsequentMessage {
     fn parse(
@@ -446,6 +453,14 @@ impl SubsequentMessage {
                         let body = super::CopyDataBody::parse(buf);
                         Ok(Some((
                             SubsequentMessage::CopyData(body),
+                            header.msg_length(),
+                        )))
+                    }
+                    COPY_FAIL_MESSAGE_TAG => {
+                        let body = CopyFailBody::parse(buf)
+                            .map_err(|e| (e.into(), header.msg_length()))?;
+                        Ok(Some((
+                            SubsequentMessage::CopyFail(body),
                             header.msg_length(),
                         )))
                     }
@@ -502,6 +517,32 @@ impl QueryBody {
         }
 
         Ok(Some(QueryBody { query }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CopyFailBody {
+    error_message: String,
+}
+
+impl Display for CopyFailBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: CopyFail")?;
+        writeln!(f, "  Error: {}", self.error_message)
+    }
+}
+
+#[derive(Error, Debug)]
+enum CopyFailBodyParseError {
+    #[error("invalid error message: {0:?}")]
+    InvalidErrorMessage(#[from] Utf8Error),
+}
+
+impl CopyFailBody {
+    fn parse(buf: &[u8]) -> Result<CopyFailBody, CopyFailBodyParseError> {
+        let error_message = from_utf8(buf)?.to_string();
+        Ok(CopyFailBody { error_message })
     }
 }
 
