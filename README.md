@@ -34,7 +34,7 @@ Supported Messages (from https://www.postgresql.org/docs/current/protocol-messag
 - [x] CommandComplete
 - [x] CopyData
 - [x] CopyDone
-- [ ] CopyFail
+- [x] CopyFail
 - [x] CopyInResponse
 - [x] CopyOutResponse
 - [x] CopyBothResponse
@@ -65,5 +65,5 @@ Supported Messages (from https://www.postgresql.org/docs/current/protocol-messag
 - [x] SASLResponse
 - [x] SSLRequest
 - [x] StartupMessage
-- [ ] Sync
+- [x] Sync
 - [x] Terminate
