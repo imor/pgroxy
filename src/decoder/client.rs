@@ -392,6 +392,7 @@ pub enum SubsequentMessage {
     Query(QueryBody),
     CopyData(super::CopyDataBody),
     CopyFail(CopyFailBody),
+    Sync(SyncBody),
     Terminate(TerminateBody),
     Unknown(super::UnknownMessageBody),
 }
@@ -402,6 +403,7 @@ impl Display for SubsequentMessage {
             SubsequentMessage::Query(query) => write!(f, "{query}"),
             SubsequentMessage::CopyData(body) => write!(f, "{body}"),
             SubsequentMessage::CopyFail(body) => write!(f, "{body}"),
+            SubsequentMessage::Sync(body) => write!(f, "{body}"),
             SubsequentMessage::Terminate(body) => write!(f, "{body}"),
             SubsequentMessage::Unknown(body) => write!(f, "{body}"),
         }
@@ -410,6 +412,9 @@ impl Display for SubsequentMessage {
 
 #[derive(Error, Debug)]
 enum SubsequentMessageParseError {
+    #[error("sync body parse error: {0}")]
+    SyncBody(#[from] SyncBodyParseError),
+
     #[error("terminate body parse error: {0}")]
     TerminateBody(#[from] TerminateBodyParseError),
 
@@ -430,6 +435,7 @@ const QUERY_MESSAGE_TAG: u8 = b'Q';
 const TERMINATE_MESSAGE_TAG: u8 = b'X';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 const COPY_FAIL_MESSAGE_TAG: u8 = b'f';
+const SYNC_MESSAGE_TAG: u8 = b'S';
 
 impl SubsequentMessage {
     fn parse(
@@ -463,6 +469,11 @@ impl SubsequentMessage {
                             SubsequentMessage::CopyFail(body),
                             header.msg_length(),
                         )))
+                    }
+                    SYNC_MESSAGE_TAG => {
+                        let body =
+                            SyncBody::parse(buf).map_err(|e| (e.into(), header.msg_length()))?;
+                        Ok(Some((SubsequentMessage::Sync(body), header.msg_length())))
                     }
                     TERMINATE_MESSAGE_TAG => {
                         let body = TerminateBody::parse(buf)
@@ -543,6 +554,31 @@ impl CopyFailBody {
     fn parse(buf: &[u8]) -> Result<CopyFailBody, CopyFailBodyParseError> {
         let error_message = from_utf8(buf)?.to_string();
         Ok(CopyFailBody { error_message })
+    }
+}
+
+#[derive(Debug)]
+pub struct SyncBody;
+
+impl Display for SyncBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: Sync")
+    }
+}
+
+#[derive(Error, Debug)]
+enum SyncBodyParseError {
+    #[error("invalid message length {0}. It should be {1}")]
+    InvalidLength(usize, usize),
+}
+
+impl SyncBody {
+    fn parse(buf: &[u8]) -> Result<SyncBody, SyncBodyParseError> {
+        if !buf.is_empty() {
+            return Err(SyncBodyParseError::InvalidLength(buf.len(), 0));
+        }
+        Ok(SyncBody)
     }
 }
 
