@@ -115,8 +115,48 @@ pub struct PhysicalMessage {
 // #[derive(Debug)]
 // pub struct TupleData {}
 
-// #[derive(Debug)]
-// pub struct PrimaryKeepaliveBody {}
+#[derive(Debug)]
+pub struct PrimaryKeepaliveBody {
+    pub end: i64,
+    pub timestamp: i64,
+    pub reply_asap: u8,
+}
+
+impl Display for PrimaryKeepaliveBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "  PrimaryKeepalive: end = {}, timestamp = {}, reply_asap = {}",
+            self.end, self.timestamp, self.reply_asap
+        )
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum PrimaryKeepaliveBodyParseError {
+    #[error("invalid message length {0}. It can't be smaller than {1}")]
+    LengthTooShort(usize, usize),
+}
+
+impl PrimaryKeepaliveBody {
+    pub fn parse(buf: &[u8]) -> Result<PrimaryKeepaliveBody, PrimaryKeepaliveBodyParseError> {
+        if buf.len() < 17 {
+            return Err(PrimaryKeepaliveBodyParseError::LengthTooShort(
+                buf.len(),
+                17,
+            ));
+        }
+        let end = BigEndian::read_i64(&buf[0..8]);
+        let timestamp = BigEndian::read_i64(&buf[8..16]);
+        let reply_asap = buf[16];
+
+        Ok(PrimaryKeepaliveBody {
+            end,
+            timestamp,
+            reply_asap,
+        })
+    }
+}
 
 // #[derive(Debug)]
 // pub struct StandbyStatusUpdateBody {}

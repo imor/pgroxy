@@ -11,7 +11,9 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use thiserror::Error;
 
-use self::replication::{XLogDataBody, XLogDataBodyParseError};
+use self::replication::{
+    PrimaryKeepaliveBody, PrimaryKeepaliveBodyParseError, XLogDataBody, XLogDataBodyParseError,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header {
@@ -82,7 +84,7 @@ impl Display for CopyDataBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: CopyData")?;
-        writeln!(f, "{}", self.contents)
+        write!(f, "{}", self.contents)
     }
 }
 
@@ -99,7 +101,7 @@ impl CopyDataBody {
 #[derive(Debug)]
 pub enum CopyDataBodyContents {
     XLogData(XLogDataBody),
-    // PrimaryKeepalive(PrimaryKeepaliveBody),
+    PrimaryKeepalive(PrimaryKeepaliveBody),
     // StandbyStatusUpdate(StandbyStatusUpdateBody),
     // HotStandbyFeedback(HotStandbyFeedbackBody),
     Raw(char, Vec<u8>),
@@ -109,11 +111,14 @@ impl Display for CopyDataBodyContents {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CopyDataBodyContents::XLogData(data) => {
-                writeln!(f, "{}", data)
+                write!(f, "{}", data)
             }
             CopyDataBodyContents::Raw(tag, data) => {
                 writeln!(f, "  Tag: {tag}")?;
                 writeln!(f, "  RawData: {data:?}")
+            }
+            CopyDataBodyContents::PrimaryKeepalive(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
@@ -129,9 +134,13 @@ pub enum CopyDataBodyContentsParseError {
 
     #[error("XLogData parse error")]
     XLogDataParseError(#[from] XLogDataBodyParseError),
+
+    #[error("PrimaryKeepalive parse error")]
+    PrimaryKeepaliveError(#[from] PrimaryKeepaliveBodyParseError),
 }
 
 const XLOG_DATA_MESSAGE_TAG: u8 = b'w';
+const PRIMARY_KEEPALIVE_MESSAGE_TAG: u8 = b'k';
 
 impl CopyDataBodyContents {
     fn parse(
@@ -154,6 +163,9 @@ impl CopyDataBodyContents {
                     replication_type,
                 )?))
             }
+            PRIMARY_KEEPALIVE_MESSAGE_TAG => Ok(CopyDataBodyContents::PrimaryKeepalive(
+                PrimaryKeepaliveBody::parse(&buf[1..])?,
+            )),
             tag => Ok(CopyDataBodyContents::Raw(tag as char, buf[1..].to_vec())),
         }
     }
