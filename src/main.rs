@@ -106,11 +106,11 @@ static LAST_SESSION_ID: AtomicU8 = AtomicU8::new(0);
 #[command(version, about, long_about = None)]
 struct Args {
     /// Addresses to listen at in the <ip>:<port> format
-    #[arg(short, long)]
+    #[arg(short, long, name = "Listen Address", required = true)]
     listen: Vec<String>,
 
-    /// Upstream address to connect to
-    #[arg(short, long)]
+    /// Upstream address to connect to in the <ip>:<port> format
+    #[arg(short, long, name = "Upstream Address")]
     connect: String,
 }
 

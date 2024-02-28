@@ -13,7 +13,20 @@ pgroxy sits between a client and a postgres server. It copies data between the c
                  +--------+
 ```
 
-Supported Messages (from https://www.postgresql.org/docs/current/protocol-message-formats.html):
+# Getting Started
+
+`pgroxy` needs both a listen address and an upstream address. E.g. to listen on
+port 8080 and connect to a postgres server at 5432 run the following:
+
+```
+cargo run -- --listen localhost:8080 --connect localhost:5432
+```
+
+With this `pgroxy` will start listening on localhost:8080. Now connect your Postgres client to localhost:8080 instead of localhost:5432 to observe the Postgres wire protocol messages.
+
+# Supported Messages
+
+(from https://www.postgresql.org/docs/current/protocol-message-formats.html):
 
 - [x] AuthenticationOk
 - [x] AuthenticationKerberosV5
