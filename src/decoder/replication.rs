@@ -7,8 +7,8 @@ use super::ReplicationType;
 
 #[derive(Debug)]
 pub struct XLogDataBody {
-    pub start: i64,
-    pub current: i64,
+    pub start: PostgresLsn,
+    pub current: PostgresLsn,
     pub timestamp: i64,
     pub message: ReplicationMessage,
 }
@@ -50,6 +50,9 @@ impl XLogDataBody {
                 data: buf[24..].to_vec(),
             }),
         };
+
+        let start = PostgresLsn(start as u64);
+        let current = PostgresLsn(current as u64);
 
         Ok(XLogDataBody {
             start,
@@ -116,8 +119,17 @@ pub struct PhysicalMessage {
 // pub struct TupleData {}
 
 #[derive(Debug)]
+pub struct PostgresLsn(u64);
+
+impl Display for PostgresLsn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:X}/{:X}", self.0 >> 32, self.0 & 0x00000000ffffffff)
+    }
+}
+
+#[derive(Debug)]
 pub struct PrimaryKeepaliveBody {
-    pub end: i64,
+    pub end: PostgresLsn,
     pub timestamp: i64,
     pub reply_asap: u8,
 }
@@ -150,6 +162,7 @@ impl PrimaryKeepaliveBody {
         let timestamp = BigEndian::read_i64(&buf[8..16]);
         let reply_asap = buf[16];
 
+        let end = PostgresLsn(end as u64);
         Ok(PrimaryKeepaliveBody {
             end,
             timestamp,
