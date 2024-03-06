@@ -567,7 +567,7 @@ impl QueryBody {
             let whitespace_end = skip_while(query, is_whitespace);
             let query = &query[whitespace_end..];
             let token_end = skip_while(query, not_whitespace);
-            let token = (&query[..token_end]).to_lowercase();
+            let token = query[..token_end].to_lowercase();
             (token, &query[whitespace_end + token_end..])
         }
 
@@ -683,8 +683,8 @@ impl Decoder for ClientMessageDecoder {
             match SubsequentMessage::parse(buf, state.replication_type()) {
                 Ok(msg) => match msg {
                     Some((msg, skip)) => {
-                        match &msg {
-                            SubsequentMessage::Query(query) => match query.query_type() {
+                        if let SubsequentMessage::Query(query) = &msg {
+                            match query.query_type() {
                                 QueryType::LogicalReplication => {
                                     *state = super::ProtocolState::RequestedReplication(
                                         super::ReplicationType::Logical,
@@ -696,8 +696,7 @@ impl Decoder for ClientMessageDecoder {
                                     );
                                 }
                                 QueryType::Other => {}
-                            },
-                            _ => {}
+                            }
                         }
                         (Ok(Some(ClientMessage::Subsequent(msg))), skip)
                     }
