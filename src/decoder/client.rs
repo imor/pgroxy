@@ -376,7 +376,6 @@ impl Display for ResponseBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: SASLResponse")?;
-        writeln!(f, "  Auth Mechanism: SASLInitialResponse")?;
         writeln!(f, "  data: {:?}", self.data)
     }
 }
