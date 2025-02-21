@@ -247,8 +247,8 @@ pub enum AuthenticationRequest {
     AuthenticationGssContinue(GssContinueBody),
     AuthenticationSspi,
     AuthenticationSasl(SaslBody),
-    AuthenticationSaslContinue,
-    AuthenticationSaslFinal,
+    AuthenticationSaslContinue(SaslContinueBody),
+    AuthenticationSaslFinal(SaslFinalBody),
 }
 
 impl Display for AuthenticationRequest {
@@ -266,6 +266,14 @@ impl Display for AuthenticationRequest {
                 writeln!(f, "{body}")?;
                 return Ok(());
             }
+            AuthenticationRequest::AuthenticationSaslContinue(body) => {
+                writeln!(f, "{body}")?;
+                return Ok(());
+            }
+            AuthenticationRequest::AuthenticationSaslFinal(body) => {
+                writeln!(f, "{body}")?;
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -277,8 +285,8 @@ impl Display for AuthenticationRequest {
             }
             AuthenticationRequest::AuthenticationGss => "AuthenticationGSS",
             AuthenticationRequest::AuthenticationSspi => "AuthenticationSSPI",
-            AuthenticationRequest::AuthenticationSaslContinue => "AuthenticationSASLContinue",
-            AuthenticationRequest::AuthenticationSaslFinal => "AuthenticationSASLFinal",
+            AuthenticationRequest::AuthenticationSaslContinue(_) => "AuthenticationSASLContinue",
+            AuthenticationRequest::AuthenticationSaslFinal(_) => "AuthenticationSASLFinal",
             _ => "",
         };
 
@@ -399,7 +407,8 @@ impl AuthenticationRequest {
                         4,
                     ))
                 } else {
-                    Ok(AuthenticationRequest::AuthenticationSaslContinue)
+                    let body = SaslContinueBody::parse(&buf[4..])?;
+                    Ok(AuthenticationRequest::AuthenticationSaslContinue(body))
                 }
             }
             AUTHETICATION_SASL_FINAL_TYPE => {
@@ -409,7 +418,8 @@ impl AuthenticationRequest {
                         4,
                     ))
                 } else {
-                    Ok(AuthenticationRequest::AuthenticationSaslFinal)
+                    let body = SaslFinalBody::parse(&buf[4..])?;
+                    Ok(AuthenticationRequest::AuthenticationSaslFinal(body))
                 }
             }
             typ => Err(AuthenticationRequestParseError::InvalidType(typ)),
@@ -1273,8 +1283,8 @@ impl Decoder for ServerMessageDecoder {
                         AuthenticationRequest::AuthenticationSasl(_) => {
                             *state = super::ProtocolState::AuthenticatingSasl(false)
                         }
-                        AuthenticationRequest::AuthenticationSaslContinue => {}
-                        AuthenticationRequest::AuthenticationSaslFinal => {}
+                        AuthenticationRequest::AuthenticationSaslContinue(_) => {}
+                        AuthenticationRequest::AuthenticationSaslFinal(_) => {}
                     },
                     ServerMessage::Ssl(SslResponse { accepted }) => {
                         if accepted {
@@ -1314,5 +1324,117 @@ impl Decoder for ServerMessageDecoder {
             }
             None => Ok(None),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct SaslContinueBody {
+    raw_data: Vec<u8>,
+    // SCRAM-specific fields
+    server_first_nonce: Option<String>,
+    server_salt: Option<String>,
+    iterations: Option<u32>,
+}
+
+impl SaslContinueBody {
+    fn parse(buf: &[u8]) -> Result<SaslContinueBody, AuthenticationRequestParseError> {
+        let raw_data = buf.to_vec();
+
+        // Try to parse SCRAM server-first-message
+        // Format: r=<server-first-nonce>,s=<server-salt>,i=<iterations>
+        let (server_first_nonce, server_salt, iterations) =
+            if let Ok(scram_str) = std::str::from_utf8(&raw_data) {
+                let parts: Vec<&str> = scram_str.split(',').collect();
+                let mut nonce = None;
+                let mut salt = None;
+                let mut iters = None;
+
+                for part in parts.iter() {
+                    match part.split_once('=') {
+                        Some(("r", n)) => nonce = Some(n.to_string()),
+                        Some(("s", s)) => salt = Some(s.to_string()),
+                        Some(("i", i)) => iters = i.parse().ok(),
+                        _ => {}
+                    }
+                }
+                (nonce, salt, iters)
+            } else {
+                (None, None, None)
+            };
+
+        Ok(SaslContinueBody {
+            raw_data,
+            server_first_nonce,
+            server_salt,
+            iterations,
+        })
+    }
+}
+
+impl Display for SaslContinueBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SASLContinue")?;
+
+        if let Some(nonce) = &self.server_first_nonce {
+            writeln!(f, "  Server First Nonce: {}", nonce)?;
+        }
+        if let Some(salt) = &self.server_salt {
+            writeln!(f, "  Server Salt: {}", salt)?;
+        }
+        if let Some(iterations) = &self.iterations {
+            writeln!(f, "  Iterations: {}", iterations)?;
+        }
+        if self.server_first_nonce.is_none()
+            || self.server_salt.is_none()
+            || self.iterations.is_none()
+        {
+            writeln!(f, "  Server First Message: {:?}", self.raw_data)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SaslFinalBody {
+    raw_data: Vec<u8>,
+    // SCRAM-specific fields
+    server_signature: Option<String>,
+}
+
+impl SaslFinalBody {
+    fn parse(buf: &[u8]) -> Result<SaslFinalBody, AuthenticationRequestParseError> {
+        let raw_data = buf.to_vec();
+
+        // Try to parse SCRAM server-final-message
+        // Format: v=<server-signature>
+        let server_signature = if let Ok(scram_str) = std::str::from_utf8(&raw_data) {
+            if let Some(("v", sig)) = scram_str.split_once('=') {
+                Some(sig.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(SaslFinalBody {
+            raw_data,
+            server_signature,
+        })
+    }
+}
+
+impl Display for SaslFinalBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SASLFinal")?;
+
+        if let Some(signature) = &self.server_signature {
+            writeln!(f, "  Server Signature: {}", signature)?;
+        } else {
+            writeln!(f, "  Server Final Message: {:?}", self.raw_data)?;
+        }
+        Ok(())
     }
 }
