@@ -837,6 +837,7 @@ impl CommandCompleteBody {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct DataRowColumn {
     pub is_null: bool,
