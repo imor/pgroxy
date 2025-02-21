@@ -411,20 +411,60 @@ enum InitialResponseBodyParseError {
 
 #[derive(Debug)]
 pub struct ResponseBody {
-    data: Vec<u8>,
+    raw_data: Vec<u8>,
+    // SCRAM-specific fields
+    client_final_nonce: Option<String>,
+    client_proof: Option<String>,
+}
+
+impl ResponseBody {
+    fn parse(buf: &[u8]) -> Option<ResponseBody> {
+        let raw_data = buf.to_vec();
+
+        // Try to parse SCRAM response
+        // Format: c=biws,r=<client-final-nonce>,p=<client-proof>
+        let (client_final_nonce, client_proof) =
+            if let Ok(scram_str) = std::str::from_utf8(&raw_data) {
+                let parts: Vec<&str> = scram_str.split(',').collect();
+                let mut nonce = None;
+                let mut proof = None;
+
+                for part in parts.iter() {
+                    match part.split_once('=') {
+                        Some(("r", n)) => nonce = Some(n.to_string()),
+                        Some(("p", p)) => proof = Some(p.to_string()),
+                        _ => {}
+                    }
+                }
+                (nonce, proof)
+            } else {
+                (None, None)
+            };
+
+        Some(ResponseBody {
+            raw_data,
+            client_final_nonce,
+            client_proof,
+        })
+    }
 }
 
 impl Display for ResponseBody {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f)?;
         writeln!(f, "  Type: SASLResponse")?;
-        writeln!(f, "  data: {:?}", self.data)
-    }
-}
 
-impl ResponseBody {
-    fn parse(buf: &[u8]) -> Option<ResponseBody> {
-        Some(ResponseBody { data: buf.to_vec() })
+        if let Some(nonce) = &self.client_final_nonce {
+            writeln!(f, "  Client Final Nonce: {}", nonce)?;
+        }
+        if let Some(proof) = &self.client_proof {
+            writeln!(f, "  Client Proof: {}", proof)?;
+        }
+        if self.client_final_nonce.is_none() || self.client_proof.is_none() {
+            writeln!(f, "  Response: {:?}", self.raw_data)?;
+        }
+
+        Ok(())
     }
 }
 
