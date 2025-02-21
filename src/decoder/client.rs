@@ -309,34 +309,15 @@ impl From<SaslMessageParseError> for std::io::Error {
 #[derive(Debug)]
 pub struct InitialResponseBody {
     auth_mechanism: String,
-    data: Vec<u8>,
-}
-
-impl Display for InitialResponseBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f)?;
-        writeln!(f, "  Type: SASLInitialResponse")?;
-        writeln!(f, "  Auth Mechanism: {}", self.auth_mechanism)?;
-        writeln!(f, "  Initial Response: {:?}", self.data)
-    }
-}
-
-#[derive(Error, Debug)]
-enum InitialResponseBodyParseError {
-    #[error("buffer length too short: {0}")]
-    BufferTooShort(usize),
-
-    #[error("invalid response length: {0}")]
-    InvalidResponseLength(i32),
-
-    #[error("invalid mechanism: {0}")]
-    InvalidMechanism(#[from] ReadCStrError),
+    raw_data: Vec<u8>,
+    // SCRAM-specific fields
+    username: Option<String>,
+    nonce: Option<String>,
 }
 
 impl InitialResponseBody {
     fn parse(mut buf: &[u8]) -> Result<Option<InitialResponseBody>, InitialResponseBodyParseError> {
         let (auth_mechanism, end_pos) = super::read_cstr(buf)?;
-
         buf = &buf[end_pos..];
 
         if buf.len() < 4 {
@@ -344,7 +325,7 @@ impl InitialResponseBody {
         }
 
         let data_length = BigEndian::read_i32(buf);
-        let data = if data_length > 0 {
+        let raw_data = if data_length > 0 {
             buf = &buf[4..];
             if data_length as usize != buf.len() {
                 return Err(InitialResponseBodyParseError::InvalidResponseLength(
@@ -360,11 +341,72 @@ impl InitialResponseBody {
             Vec::new()
         };
 
+        let (username, nonce) = if auth_mechanism == "SCRAM-SHA-256" && !raw_data.is_empty() {
+            if let Ok(scram_str) = std::str::from_utf8(&raw_data) {
+                let parts: Vec<&str> = scram_str.split(',').collect();
+                if parts.len() >= 4 {
+                    let mut username = None;
+                    let mut nonce = None;
+                    for part in parts[2..].iter() {
+                        match part.split_once('=') {
+                            Some(("n", u)) => username = Some(u.to_string()),
+                            Some(("r", n)) => nonce = Some(n.to_string()),
+                            _ => {}
+                        }
+                    }
+                    (username, nonce)
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
         Ok(Some(InitialResponseBody {
             auth_mechanism,
-            data,
+            raw_data,
+            username,
+            nonce,
         }))
     }
+}
+
+impl Display for InitialResponseBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "  Type: SASLInitialResponse")?;
+        writeln!(f, "  Auth Mechanism: {}", self.auth_mechanism)?;
+
+        if self.auth_mechanism == "SCRAM-SHA-256" {
+            if let Some(username) = &self.username {
+                writeln!(f, "  Username: {}", username)?;
+            }
+            if let Some(nonce) = &self.nonce {
+                writeln!(f, "  Client Nonce: {}", nonce)?;
+            }
+            if self.username.is_none() || self.nonce.is_none() {
+                writeln!(f, "  Initial Response: {:?}", self.raw_data)?;
+            }
+        } else {
+            writeln!(f, "  Initial Response: {:?}", self.raw_data)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug)]
+enum InitialResponseBodyParseError {
+    #[error("buffer length too short: {0}")]
+    BufferTooShort(usize),
+
+    #[error("invalid response length: {0}")]
+    InvalidResponseLength(i32),
+
+    #[error("invalid mechanism: {0}")]
+    InvalidMechanism(#[from] ReadCStrError),
 }
 
 #[derive(Debug)]
