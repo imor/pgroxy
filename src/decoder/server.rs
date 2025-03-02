@@ -30,6 +30,7 @@ pub enum ServerMessage {
     CopyDone(CopyDoneBody),
     Error(ErrorResponseBody),
     Unknown(super::UnknownMessageBody),
+    EmptyQueryResponse,
 }
 
 impl Display for ServerMessage {
@@ -50,6 +51,7 @@ impl Display for ServerMessage {
             ServerMessage::CopyDone(body) => write!(f, "{body}"),
             ServerMessage::Error(body) => write!(f, "{body}"),
             ServerMessage::Unknown(body) => write!(f, "{body}"),
+            ServerMessage::EmptyQueryResponse => writeln!(f, "EmptyQueryResponse"),
         }
     }
 }
@@ -117,6 +119,7 @@ const COPY_OUT_MESSAGE_TAG: u8 = b'H';
 const COPY_DATA_MESSAGE_TAG: u8 = b'd';
 const COPY_BOTH_MESSAGE_TAG: u8 = b'W';
 const COPY_DONE_MESSAGE_TAG: u8 = b'c';
+const EMPTY_QUERY_RESPONSE_MESSAGE_TAG: u8 = b'I';
 const ERROR_RESPONSE_MESSAGE_TAG: u8 = b'E';
 
 impl ServerMessage {
@@ -222,6 +225,9 @@ impl ServerMessage {
             COPY_DONE_MESSAGE_TAG => {
                 let body = CopyDoneBody::parse(buf).map_err(|e| (e.into(), header.msg_length()))?;
                 Ok((ServerMessage::CopyDone(body), header.msg_length()))
+            }
+            EMPTY_QUERY_RESPONSE_MESSAGE_TAG => {
+                Ok((ServerMessage::EmptyQueryResponse, header.msg_length()))
             }
             ERROR_RESPONSE_MESSAGE_TAG => {
                 let body =
@@ -1244,90 +1250,6 @@ impl ErrorResponseBody {
     }
 }
 
-pub struct ServerMessageDecoder {
-    pub(super) protocol_state: Arc<Mutex<super::ProtocolState>>,
-    pub(super) row_description: Option<RowDescriptionBody>,
-}
-
-impl ServerMessageDecoder {
-    pub fn row_description(&mut self) -> &Option<RowDescriptionBody> {
-        &self.row_description
-    }
-}
-
-impl Decoder for ServerMessageDecoder {
-    type Item = ServerMessage;
-    type Error = std::io::Error;
-
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let mut state = self
-            .protocol_state
-            .lock()
-            .expect("failed to lock protocol_state");
-        match ServerMessage::parse(
-            buf,
-            state.expecting_ssl_response(),
-            state.replication_type(),
-        )? {
-            Some(msg) => {
-                match msg {
-                    ServerMessage::Authentication(ref auth_req) => match auth_req {
-                        AuthenticationRequest::AuthenticationOk => {
-                            *state = super::ProtocolState::StartupDone
-                        }
-                        AuthenticationRequest::AuthenticationKerberosV5 => {}
-                        AuthenticationRequest::AuthenticationCleartextPassword => {}
-                        AuthenticationRequest::AuthenticationMd5Password(_) => {}
-                        AuthenticationRequest::AuthenticationGss => {}
-                        AuthenticationRequest::AuthenticationGssContinue(_) => {}
-                        AuthenticationRequest::AuthenticationSspi => {}
-                        AuthenticationRequest::AuthenticationSasl(_) => {
-                            *state = super::ProtocolState::AuthenticatingSasl(false)
-                        }
-                        AuthenticationRequest::AuthenticationSaslContinue(_) => {}
-                        AuthenticationRequest::AuthenticationSaslFinal(_) => {}
-                    },
-                    ServerMessage::Ssl(SslResponse { accepted }) => {
-                        if accepted {
-                            *state = super::ProtocolState::StartupDone
-                        } else {
-                            *state = super::ProtocolState::Initial
-                        }
-                    }
-                    ServerMessage::Error(_) => {
-                        if matches!(*state, super::ProtocolState::AuthenticatingSasl(_)) {
-                            *state = super::ProtocolState::Initial
-                        } else if matches!(*state, super::ProtocolState::RequestedReplication(_)) {
-                            *state = super::ProtocolState::StartupDone
-                        }
-                    }
-                    ServerMessage::RowDescription(ref body) => {
-                        self.row_description = Some(body.clone())
-                    }
-                    ServerMessage::CopyBoth(_) => match *state {
-                        super::ProtocolState::RequestedReplication(
-                            super::ReplicationType::Logical,
-                        ) => {
-                            *state =
-                                super::ProtocolState::Replicating(super::ReplicationType::Logical)
-                        }
-                        super::ProtocolState::RequestedReplication(
-                            super::ReplicationType::Physical,
-                        ) => {
-                            *state =
-                                super::ProtocolState::Replicating(super::ReplicationType::Physical)
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-                Ok(Some(msg))
-            }
-            None => Ok(None),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct SaslContinueBody {
     raw_data: Vec<u8>,
@@ -1437,5 +1359,89 @@ impl Display for SaslFinalBody {
             writeln!(f, "  Server Final Message: {:?}", self.raw_data)?;
         }
         Ok(())
+    }
+}
+
+pub struct ServerMessageDecoder {
+    pub(super) protocol_state: Arc<Mutex<super::ProtocolState>>,
+    pub(super) row_description: Option<RowDescriptionBody>,
+}
+
+impl ServerMessageDecoder {
+    pub fn row_description(&mut self) -> &Option<RowDescriptionBody> {
+        &self.row_description
+    }
+}
+
+impl Decoder for ServerMessageDecoder {
+    type Item = ServerMessage;
+    type Error = std::io::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let mut state = self
+            .protocol_state
+            .lock()
+            .expect("failed to lock protocol_state");
+        match ServerMessage::parse(
+            buf,
+            state.expecting_ssl_response(),
+            state.replication_type(),
+        )? {
+            Some(msg) => {
+                match msg {
+                    ServerMessage::Authentication(ref auth_req) => match auth_req {
+                        AuthenticationRequest::AuthenticationOk => {
+                            *state = super::ProtocolState::StartupDone
+                        }
+                        AuthenticationRequest::AuthenticationKerberosV5 => {}
+                        AuthenticationRequest::AuthenticationCleartextPassword => {}
+                        AuthenticationRequest::AuthenticationMd5Password(_) => {}
+                        AuthenticationRequest::AuthenticationGss => {}
+                        AuthenticationRequest::AuthenticationGssContinue(_) => {}
+                        AuthenticationRequest::AuthenticationSspi => {}
+                        AuthenticationRequest::AuthenticationSasl(_) => {
+                            *state = super::ProtocolState::AuthenticatingSasl(false)
+                        }
+                        AuthenticationRequest::AuthenticationSaslContinue(_) => {}
+                        AuthenticationRequest::AuthenticationSaslFinal(_) => {}
+                    },
+                    ServerMessage::Ssl(SslResponse { accepted }) => {
+                        if accepted {
+                            *state = super::ProtocolState::StartupDone
+                        } else {
+                            *state = super::ProtocolState::Initial
+                        }
+                    }
+                    ServerMessage::Error(_) => {
+                        if matches!(*state, super::ProtocolState::AuthenticatingSasl(_)) {
+                            *state = super::ProtocolState::Initial
+                        } else if matches!(*state, super::ProtocolState::RequestedReplication(_)) {
+                            *state = super::ProtocolState::StartupDone
+                        }
+                    }
+                    ServerMessage::RowDescription(ref body) => {
+                        self.row_description = Some(body.clone())
+                    }
+                    ServerMessage::CopyBoth(_) => match *state {
+                        super::ProtocolState::RequestedReplication(
+                            super::ReplicationType::Logical,
+                        ) => {
+                            *state =
+                                super::ProtocolState::Replicating(super::ReplicationType::Logical)
+                        }
+                        super::ProtocolState::RequestedReplication(
+                            super::ReplicationType::Physical,
+                        ) => {
+                            *state =
+                                super::ProtocolState::Replicating(super::ReplicationType::Physical)
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+                Ok(Some(msg))
+            }
+            None => Ok(None),
+        }
     }
 }
