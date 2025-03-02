@@ -53,7 +53,7 @@ With this `pgroxy` will start listening on localhost:8080. Now connect your Post
 - [x] CopyBothResponse
 - [x] DataRow
 - [ ] Describe
-- [ ] EmptyQueryResponse
+- [x] EmptyQueryResponse
 - [x] ErrorResponse
 - [ ] Execute
 - [ ] Flush
