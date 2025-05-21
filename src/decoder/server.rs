@@ -919,17 +919,21 @@ impl Display for DataRowBodyFormatter<'_> {
                     // text
                     if let Ok(value) = std::str::from_utf8(&column.value) {
                         writeln!(f, "  Column: value = {value}")?;
+                        writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
                     } else {
                         writeln!(f, "  Column: value = {:?}", column.value)?;
+                        writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
                     }
                 } else {
                     // binary or unknown
                     writeln!(f, "  Column: value = {:?}", column.value)?;
+                    writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
                 }
             }
         } else {
             for column in &self.data_row_body.columns {
                 writeln!(f, "  Column: value = {:?}", column.value)?;
+                writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
             }
         }
         Ok(())
