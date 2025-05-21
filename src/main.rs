@@ -1,9 +1,11 @@
 mod decoder;
 
+use std::fmt::Display;
 use std::sync::atomic::AtomicU16;
 
 use bytes::BytesMut;
 use clap::Parser;
+use decoder::client::{ClientMessage, FirstMessage};
 use decoder::server::{DataRowBodyFormatter, ServerMessage};
 use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
 use futures::FutureExt;
@@ -20,12 +22,47 @@ trait HalfSession {
     fn cancel_requested(&self);
 }
 
+#[derive(Clone)]
+enum SessionId {
+    Number(u16),
+    NameAndNumber(String, u16),
+}
+
+impl SessionId {
+    fn new() -> Self {
+        let id = LAST_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        SessionId::Number(id)
+    }
+
+    fn set_name(&mut self, name: String) {
+        match self {
+            SessionId::Number(number) => {
+                *self = SessionId::NameAndNumber(name, *number);
+            }
+            SessionId::NameAndNumber(_, number) => {
+                *self = SessionId::NameAndNumber(name, *number);
+            }
+        }
+    }
+}
+
+impl Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SessionId::Number(id) => write!(f, "{id}"),
+            SessionId::NameAndNumber(name, number) => write!(f, "{number}:{name}"),
+        }
+    }
+}
+
 struct ClientToUpstreamSession {
     buf: BytesMut,
     decoder: ClientMessageDecoder,
     total_bytes_copied: u64,
-    session_id: u16,
+    session_id: SessionId,
 }
+
+const APPLICATION_NAME_PARAM: &str = "application_name";
 
 impl HalfSession for ClientToUpstreamSession {
     fn bytes_copied(&mut self, bytes: &[u8]) {
@@ -37,7 +74,17 @@ impl HalfSession for ClientToUpstreamSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => println!("→ [{}] {msg}", self.session_id),
+                Ok(Some(msg)) => {
+                    if let ClientMessage::First(FirstMessage::StartupMessage(ref startup_msg)) = msg
+                    {
+                        for pair in startup_msg.parameters.chunks(2) {
+                            if pair[0] == APPLICATION_NAME_PARAM {
+                                self.session_id.set_name(pair[1].to_string());
+                            }
+                        }
+                    }
+                    println!("→ [{}] {msg}", self.session_id)
+                }
                 Ok(None) => {
                     break;
                 }
@@ -59,7 +106,7 @@ struct UpstreamToClientSession {
     buf: BytesMut,
     decoder: ServerMessageDecoder,
     total_bytes_copied: u64,
-    session_id: u16,
+    session_id: SessionId,
 }
 
 impl HalfSession for UpstreamToClientSession {
@@ -72,17 +119,24 @@ impl HalfSession for UpstreamToClientSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => {
-                    if let ServerMessage::DataRow(ref row) = msg {
+                Ok(Some(msg)) => match msg {
+                    ServerMessage::DataRow(ref row) => {
                         let formatter = DataRowBodyFormatter {
                             data_row_body: row,
                             row_description_body: self.decoder.row_description(),
                         };
                         println!("← [{}] {formatter}", self.session_id)
-                    } else {
+                    }
+                    ServerMessage::ParameterStatus(ref param_status) => {
+                        if param_status.param_name == APPLICATION_NAME_PARAM {
+                            self.session_id.set_name(param_status.param_value.clone());
+                        }
+                        println!("← [{}] {param_status}", self.session_id)
+                    }
+                    _ => {
                         println!("← [{}] {msg}", self.session_id)
                     }
-                }
+                },
                 Ok(None) => {
                     break;
                 }
@@ -151,7 +205,7 @@ async fn handle_connection(
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (mut client, client_addr) = listener6.accept().await?;
-        let session_id = LAST_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let session_id = SessionId::new();
         println!("→ [{session_id}] Received a client connection from {client_addr}");
 
         let upstream_addr = upstream_addr.to_string();
@@ -176,13 +230,13 @@ async fn handle_connection(
                 buf: BytesMut::new(),
                 decoder: client_msg_decoder,
                 total_bytes_copied: 0,
-                session_id,
+                session_id: session_id.clone(),
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
                 buf: BytesMut::new(),
                 decoder: server_msg_decoder,
                 total_bytes_copied: 0,
-                session_id,
+                session_id: session_id.clone(),
             };
 
             let (client_res, upstream_res) = tokio::join! {
