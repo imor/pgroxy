@@ -71,7 +71,7 @@ impl Header {
 
 #[derive(Debug)]
 pub struct CopyDataBody {
-    contents: CopyDataBodyContents,
+    pub contents: CopyDataBodyContents,
 }
 
 #[derive(Error, Debug)]

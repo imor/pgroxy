@@ -4,7 +4,9 @@ use std::sync::atomic::AtomicU8;
 
 use bytes::BytesMut;
 use clap::Parser;
+use decoder::client::{ClientMessage, SubsequentMessage};
 use decoder::server::{DataRowBodyFormatter, ServerMessage};
+use decoder::CopyDataBodyContents;
 use decoder::{client::ClientMessageDecoder, server::ServerMessageDecoder};
 use futures::FutureExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -18,6 +20,7 @@ trait HalfSession {
     fn bytes_copied(&mut self, bytes: &[u8]);
     fn connection_closed(&self);
     fn cancel_requested(&self);
+    fn set_table_copy_started(&mut self, started: bool);
 }
 
 struct ClientToUpstreamSession {
@@ -25,6 +28,7 @@ struct ClientToUpstreamSession {
     decoder: ClientMessageDecoder,
     total_bytes_copied: u64,
     session_id: u8,
+    table_copy_started: bool,
 }
 
 impl HalfSession for ClientToUpstreamSession {
@@ -37,7 +41,15 @@ impl HalfSession for ClientToUpstreamSession {
             let message = self.decoder.decode(&mut self.buf);
 
             match message {
-                Ok(Some(msg)) => println!("→ [{}] {msg}", self.session_id),
+                Ok(Some(msg)) => {
+                    if let ClientMessage::Subsequent(SubsequentMessage::Query(ref query)) = msg {
+                        if query.query.starts_with("COPY public.gen_data") {
+                            self.set_table_copy_started(true);
+                            // println!("==========GOT GEN_DATA COPY QUERY==========");
+                        }
+                    }
+                    println!("→ [{}] {msg}", self.session_id)
+                }
                 Ok(None) => {
                     break;
                 }
@@ -52,6 +64,10 @@ impl HalfSession for ClientToUpstreamSession {
 
     fn cancel_requested(&self) {
         println!("× [{}] Closing connection from client", self.session_id);
+    }
+
+    fn set_table_copy_started(&mut self, started: bool) {
+        self.table_copy_started = started;
     }
 }
 
@@ -80,6 +96,17 @@ impl HalfSession for UpstreamToClientSession {
                         };
                         println!("← [{}] {formatter}", self.session_id)
                     } else {
+                        if let ServerMessage::CopyData(ref data) = msg {
+                            if let CopyDataBodyContents::Raw(_c, ref raw) = data.contents {
+                                // is it the first table
+                                // if raw.as_slice() == [9, 100, 97, 116, 97, 95, 54, 10] {
+                                // is it the second table
+                                if raw.as_slice() == [54, 9, 100, 97, 116, 97, 95, 49, 54, 10] {
+                                    // println!("==========GOT BREAKPOINT COPY DATA==========");
+                                    panic!("TERMINATING");
+                                }
+                            }
+                        }
                         println!("← [{}] {msg}", self.session_id)
                     }
                 }
@@ -98,6 +125,8 @@ impl HalfSession for UpstreamToClientSession {
     fn cancel_requested(&self) {
         println!("× [{}] Closing connection to upstream", self.session_id);
     }
+
+    fn set_table_copy_started(&mut self, _started: bool) {}
 }
 
 static LAST_SESSION_ID: AtomicU8 = AtomicU8::new(0);
@@ -128,6 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     for addr in &listen {
         let listener = TcpListener::bind(addr).await?;
+        println!("---------------------------------------------------------------------");
         println!("👂Listening on {addr}");
         let connect = connect.clone();
         let result = tokio::spawn(async {
@@ -154,7 +184,7 @@ async fn handle_connection(
         let session_id = LAST_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         println!("→ [{session_id}] Received a client connection from {client_addr}");
 
-        let upstream_addr = upstream_addr.to_string();
+        let upstream_addr = upstream_addr.clone();
 
         tokio::spawn(async move {
             let mut upstream = match TcpStream::connect(upstream_addr).await {
@@ -177,6 +207,7 @@ async fn handle_connection(
                 decoder: client_msg_decoder,
                 total_bytes_copied: 0,
                 session_id,
+                table_copy_started: false,
             };
             let mut upstream_to_client_session = UpstreamToClientSession {
                 buf: BytesMut::new(),

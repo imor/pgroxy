@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    io::Read,
     str::{from_utf8, Utf8Error},
     sync::{Arc, Mutex},
 };
@@ -84,6 +85,11 @@ impl FirstMessage {
     fn parse(
         buf: &mut BytesMut,
     ) -> Result<Option<(FirstMessage, usize)>, (ParseFirstMessageError, usize)> {
+        // for byte in buf.bytes() {
+        //     let byte = byte.unwrap();
+        //     println!("byte: {byte}");
+        // }
+        // println!("buf: {buf:?}");
         if buf.len() < 8 {
             // Not enough data to read message length and request code
             buf.reserve(8 - buf.len());

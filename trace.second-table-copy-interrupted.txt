@@ -1,0 +1,3268 @@
+---------------------------------------------------------------------
+👂Listening on localhost:5436
+→ [0] Received a client connection from [::1]:61015
+→ [0] 
+  Type: SSLRequest
+
+← [0] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [0] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [0] 
+  Type: AuthenticationOk
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [0] 
+  Type: BackendKeyData
+  ProcessId: 93802
+  SecretKey: -1397113088
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [0] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = 
+
+← [0] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: SELECT t.pubname FROM
+ pg_catalog.pg_publication t WHERE
+ t.pubname IN ('pub_publication')
+
+← [0] 
+  Type: RowDescription
+  Field: name = pubname, oid = 6104, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = pub_publication
+
+← [0] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: SELECT DISTINCT n.nspname, c.relname, gpt.attrs
+       FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN ( SELECT (pg_get_publication_tables(VARIADIC array_agg(pubname::text))).*
+                FROM pg_publication
+                WHERE pubname IN ( 'pub_publication' )) AS gpt
+             ON gpt.relid = c.oid
+
+
+← [0] 
+  Type: RowDescription
+  Field: name = nspname, oid = 2615, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+  Field: name = relname, oid = 1259, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+  Field: name = attrs, oid = 0, attnum = 0, typeoid = 22, typelen = -1, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = public
+  Column: value = gen_data_1
+  Column: value = 1 2
+
+← [0] 
+  Type: DataRow
+  Column: value = public
+  Column: value = gen_data_2
+  Column: value = 1 2
+
+← [0] 
+  Type: CommandComplete
+  Tag: SELECT 2
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: CREATE_REPLICATION_SLOT "sub_subscription" LOGICAL pgoutput (SNAPSHOT 'nothing')
+
+← [0] 
+  Type: RowDescription
+  Field: name = slot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = consistent_point, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = snapshot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = output_plugin, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = sub_subscription
+  Column: value = 0/19649F0
+  Column: value = 
+  Column: value = pgoutput
+
+← [0] 
+  Type: CommandComplete
+  Tag: CREATE_REPLICATION_SLOT
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Terminate
+
+× [0] Client closed the connection
+× [0] Closing connection to upstream
+→ [0] copied total 805 bytes in this session
+← [0] copied total 1000 bytes in this session
+→ [1] Received a client connection from [::1]:61017
+→ [1] 
+  Type: SSLRequest
+
+← [1] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [1] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [1] 
+  Type: AuthenticationOk
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [1] 
+  Type: BackendKeyData
+  ProcessId: 93807
+  SecretKey: 1974781560
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [1] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [1] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19649F0
+  Column: value = pub_db
+
+← [1] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/0 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [1] 
+  Type: CopyBothResponse
+  Format: text
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19649F0, timestamp = 801155545567946, reply_asap = 0
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19649F0, timestamp = 801155545567987, reply_asap = 0
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19649F0, timestamp = 801155545568086, reply_asap = 0
+
+→ [2] Received a client connection from [::1]:61019
+→ [2] 
+  Type: SSLRequest
+
+← [2] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [2] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = pg_16399_sync_16385_7506917068222656033
+  Parameter: client_encoding = UTF8
+
+← [2] 
+  Type: AuthenticationOk
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: application_name = pg_16399_sync_16385_7506917068222656033
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [2] 
+  Type: BackendKeyData
+  ProcessId: 93812
+  SecretKey: -1777702902
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [2] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ
+
+← [2] 
+  Type: CommandComplete
+  Tag: BEGIN
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: CREATE_REPLICATION_SLOT "pg_16399_sync_16385_7506917068222656033" LOGICAL pgoutput (SNAPSHOT 'use')
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19649F0, timestamp = 801155545580663, reply_asap = 0
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964A28, timestamp = 801155545581271, reply_asap = 0
+
+← [2] 
+  Type: RowDescription
+  Field: name = slot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = consistent_point, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = snapshot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = output_plugin, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = pg_16399_sync_16385_7506917068222656033
+  Column: value = 0/1964A28
+  Column: value = 
+  Column: value = pgoutput
+
+← [2] 
+  Type: CommandComplete
+  Tag: CREATE_REPLICATION_SLOT
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: SELECT c.oid, c.relreplident, c.relkind  FROM pg_catalog.pg_class c  INNER JOIN pg_catalog.pg_namespace n        ON (c.relnamespace = n.oid) WHERE n.nspname = 'public'   AND c.relname = 'gen_data_1'
+
+← [2] 
+  Type: RowDescription
+  Field: name = oid, oid = 1259, attnum = 1, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = relreplident, oid = 1259, attnum = 26, typeoid = 18, typelen = 1, typmod = -1, format = 0
+  Field: name = relkind, oid = 1259, attnum = 17, typeoid = 18, typelen = 1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 16385
+  Column: value = d
+  Column: value = r
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: SELECT DISTINCT  (CASE WHEN (array_length(gpt.attrs, 1) = c.relnatts)   THEN NULL ELSE gpt.attrs END)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt,  pg_class c WHERE gpt.relid = 16385 AND c.oid = gpt.relid   AND p.pubname IN ( 'pub_publication' )
+
+→ [3] Received a client connection from [::1]:61021
+← [2] 
+  Type: RowDescription
+  Field: name = attrs, oid = 0, attnum = 0, typeoid = 22, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: SELECT a.attnum,       a.attname,       a.atttypid,       a.attnum = ANY(i.indkey)  FROM pg_catalog.pg_attribute a  LEFT JOIN pg_catalog.pg_index i       ON (i.indexrelid = pg_get_replica_identity_index(16385)) WHERE a.attnum > 0::pg_catalog.int2   AND NOT a.attisdropped AND a.attgenerated = ''   AND a.attrelid = 16385 ORDER BY a.attnum
+
+← [2] 
+  Type: RowDescription
+  Field: name = attnum, oid = 1249, attnum = 5, typeoid = 21, typelen = 2, typmod = -1, format = 0
+  Field: name = attname, oid = 1249, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+  Field: name = atttypid, oid = 1249, attnum = 3, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = ?column?, oid = 0, attnum = 0, typeoid = 16, typelen = 1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 1
+  Column: value = id
+  Column: value = 23
+  Column: value = t
+
+← [2] 
+  Type: DataRow
+  Column: value = 2
+  Column: value = name
+  Column: value = 1043
+  Column: value = f
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 2
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: SELECT DISTINCT pg_get_expr(gpt.qual, gpt.relid)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt WHERE gpt.relid = 16385   AND p.pubname IN ( 'pub_publication' )
+
+← [2] 
+  Type: RowDescription
+  Field: name = pg_get_expr, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: COPY public.gen_data_1 (id, name) TO STDOUT
+
+← [2] 
+  Type: CopyOutResponse
+  Format: text
+  Column Format: unknown
+  Column Format: text
+
+← [2] 
+  Type: CopyData
+  Tag: 1
+  RawData: [9, 100, 97, 116, 97, 95, 49, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 2
+  RawData: [9, 100, 97, 116, 97, 95, 50, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 3
+  RawData: [9, 100, 97, 116, 97, 95, 51, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 4
+  RawData: [9, 100, 97, 116, 97, 95, 52, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 5
+  RawData: [9, 100, 97, 116, 97, 95, 53, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 6
+  RawData: [9, 100, 97, 116, 97, 95, 54, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 7
+  RawData: [9, 100, 97, 116, 97, 95, 55, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 8
+  RawData: [9, 100, 97, 116, 97, 95, 56, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 9
+  RawData: [9, 100, 97, 116, 97, 95, 57, 10]
+
+← [2] 
+  Type: CopyData
+  Tag: 1
+  RawData: [48, 9, 100, 97, 116, 97, 95, 49, 48, 10]
+
+← [2] 
+  Type: CopyDone
+
+← [2] 
+  Type: CommandComplete
+  Tag: COPY 10
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [2] 
+  Type: Query
+  Query: COMMIT
+
+← [2] 
+  Type: CommandComplete
+  Tag: COMMIT
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: START_REPLICATION SLOT "pg_16399_sync_16385_7506917068222656033" LOGICAL 0/1964A28 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [2] 
+  Type: CopyBothResponse
+  Format: text
+
+← [2] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964A28, timestamp = 801155545585889, reply_asap = 0
+
+← [2] 
+  Type: CopyDone
+
+← [2] 
+  Type: CommandComplete
+  Tag: COPY 0
+
+← [2] 
+  Type: CommandComplete
+  Tag: START_REPLICATION
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+← [2] 
+  Type: CommandComplete
+  Tag: DROP_REPLICATION_SLOT
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+× [2] Client closed the connection
+× [2] Closing connection to upstream
+→ [2] copied total 1811 bytes in this session
+← [2] copied total 1567 bytes in this session
+→ [3] 
+  Type: SSLRequest
+
+← [3] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [3] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = pg_16399_sync_16390_7506917068222656033
+  Parameter: client_encoding = UTF8
+
+← [3] 
+  Type: AuthenticationOk
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: application_name = pg_16399_sync_16390_7506917068222656033
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [3] 
+  Type: BackendKeyData
+  ProcessId: 93815
+  SecretKey: 2028244416
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [3] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [3] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [3] 
+  Type: Query
+  Query: BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ
+
+← [3] 
+  Type: CommandComplete
+  Tag: BEGIN
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: CREATE_REPLICATION_SLOT "pg_16399_sync_16390_7506917068222656033" LOGICAL pgoutput (SNAPSHOT 'use')
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964A60, timestamp = 801155545592450, reply_asap = 0
+
+← [3] 
+  Type: RowDescription
+  Field: name = slot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = consistent_point, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = snapshot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = output_plugin, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = pg_16399_sync_16390_7506917068222656033
+  Column: value = 0/1964A60
+  Column: value = 
+  Column: value = pgoutput
+
+← [3] 
+  Type: CommandComplete
+  Tag: CREATE_REPLICATION_SLOT
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: SELECT c.oid, c.relreplident, c.relkind  FROM pg_catalog.pg_class c  INNER JOIN pg_catalog.pg_namespace n        ON (c.relnamespace = n.oid) WHERE n.nspname = 'public'   AND c.relname = 'gen_data_2'
+
+← [3] 
+  Type: RowDescription
+  Field: name = oid, oid = 1259, attnum = 1, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = relreplident, oid = 1259, attnum = 26, typeoid = 18, typelen = 1, typmod = -1, format = 0
+  Field: name = relkind, oid = 1259, attnum = 17, typeoid = 18, typelen = 1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 16392
+  Column: value = d
+  Column: value = r
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: SELECT DISTINCT  (CASE WHEN (array_length(gpt.attrs, 1) = c.relnatts)   THEN NULL ELSE gpt.attrs END)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt,  pg_class c WHERE gpt.relid = 16392 AND c.oid = gpt.relid   AND p.pubname IN ( 'pub_publication' )
+
+← [3] 
+  Type: RowDescription
+  Field: name = attrs, oid = 0, attnum = 0, typeoid = 22, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: SELECT a.attnum,       a.attname,       a.atttypid,       a.attnum = ANY(i.indkey)  FROM pg_catalog.pg_attribute a  LEFT JOIN pg_catalog.pg_index i       ON (i.indexrelid = pg_get_replica_identity_index(16392)) WHERE a.attnum > 0::pg_catalog.int2   AND NOT a.attisdropped AND a.attgenerated = ''   AND a.attrelid = 16392 ORDER BY a.attnum
+
+← [3] 
+  Type: RowDescription
+  Field: name = attnum, oid = 1249, attnum = 5, typeoid = 21, typelen = 2, typmod = -1, format = 0
+  Field: name = attname, oid = 1249, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+  Field: name = atttypid, oid = 1249, attnum = 3, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = ?column?, oid = 0, attnum = 0, typeoid = 16, typelen = 1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 1
+  Column: value = id
+  Column: value = 23
+  Column: value = t
+
+← [3] 
+  Type: DataRow
+  Column: value = 2
+  Column: value = name
+  Column: value = 1043
+  Column: value = f
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 2
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: SELECT DISTINCT pg_get_expr(gpt.qual, gpt.relid)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt WHERE gpt.relid = 16392   AND p.pubname IN ( 'pub_publication' )
+
+← [3] 
+  Type: RowDescription
+  Field: name = pg_get_expr, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [3] 
+  Type: Query
+  Query: COPY public.gen_data_2 (id, name) TO STDOUT
+
+← [3] 
+  Type: CopyOutResponse
+  Format: text
+  Column Format: unknown
+  Column Format: text
+
+← [3] 
+  Type: CopyData
+  Tag: 1
+  RawData: [49, 9, 100, 97, 116, 97, 95, 49, 49, 10]
+
+← [3] 
+  Type: CopyData
+  Tag: 1
+  RawData: [50, 9, 100, 97, 116, 97, 95, 49, 50, 10]
+
+← [3] 
+  Type: CopyData
+  Tag: 1
+  RawData: [51, 9, 100, 97, 116, 97, 95, 49, 51, 10]
+
+← [3] 
+  Type: CopyData
+  Tag: 1
+  RawData: [52, 9, 100, 97, 116, 97, 95, 49, 52, 10]
+
+← [3] 
+  Type: CopyData
+  Tag: 1
+  RawData: [53, 9, 100, 97, 116, 97, 95, 49, 53, 10]
+
+---------------------------------------------------------------------
+👂Listening on localhost:5436
+→ [0] Received a client connection from [::1]:61113
+→ [0] 
+  Type: SSLRequest
+
+← [0] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [0] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [0] 
+  Type: AuthenticationOk
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [0] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [0] 
+  Type: BackendKeyData
+  ProcessId: 93905
+  SecretKey: 1468233248
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [0] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = 
+
+← [0] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [0] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [0] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/1964B88
+  Column: value = pub_db
+
+← [0] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [0] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [0] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/0 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [0] 
+  Type: CopyBothResponse
+  Format: text
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964A60, timestamp = 801155590581883, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  XLogData: start = 0/1964A98, current = 0/1964A98, timestamp = 801155590583364
+  LogicalMessage: data=[66, 0, 0, 0, 0, 1, 150, 75, 32, 0, 2, 216, 165, 145, 137, 89, 213, 0, 0, 2, 224]
+
+
+← [0] 
+  Type: CopyData
+  XLogData: start = 0/0, current = 0/0, timestamp = 801155590583420
+  LogicalMessage: data=[82, 0, 0, 64, 1, 112, 117, 98, 108, 105, 99, 0, 103, 101, 110, 95, 100, 97, 116, 97, 95, 49, 0, 100, 0, 2, 1, 105, 100, 0, 0, 0, 0, 23, 255, 255, 255, 255, 0, 110, 97, 109, 101, 0, 0, 0, 4, 19, 255, 255, 255, 255]
+
+
+← [0] 
+  Type: CopyData
+  XLogData: start = 0/1964A98, current = 0/1964A98, timestamp = 801155590583434
+  LogicalMessage: data=[73, 0, 0, 64, 1, 78, 0, 2, 116, 0, 0, 0, 2, 49, 49, 116, 0, 0, 0, 7, 100, 97, 116, 97, 95, 49, 49]
+
+
+← [0] 
+  Type: CopyData
+  XLogData: start = 0/1964B50, current = 0/1964B50, timestamp = 801155590583440
+  LogicalMessage: data=[67, 0, 0, 0, 0, 0, 1, 150, 75, 32, 0, 0, 0, 0, 1, 150, 75, 80, 0, 2, 216, 165, 145, 137, 89, 213]
+
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964B88, timestamp = 801155590583908, reply_asap = 0
+
+→ [1] Received a client connection from [::1]:61115
+→ [1] 
+  Type: SSLRequest
+
+← [1] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [1] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = pg_16399_sync_16390_7506917068222656033
+  Parameter: client_encoding = UTF8
+
+← [1] 
+  Type: AuthenticationOk
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: application_name = pg_16399_sync_16390_7506917068222656033
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [1] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [1] 
+  Type: BackendKeyData
+  ProcessId: 93907
+  SecretKey: 757531359
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [1] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: DROP_REPLICATION_SLOT pg_16399_sync_16390_7506917068222656033 WAIT
+
+← [1] 
+  Type: CommandComplete
+  Tag: DROP_REPLICATION_SLOT
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ
+
+← [1] 
+  Type: CommandComplete
+  Tag: BEGIN
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: CREATE_REPLICATION_SLOT "pg_16399_sync_16390_7506917068222656033" LOGICAL pgoutput (SNAPSHOT 'use')
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964B88, timestamp = 801155590593437, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964BC0, timestamp = 801155590594311, reply_asap = 0
+
+← [1] 
+  Type: RowDescription
+  Field: name = slot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = consistent_point, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = snapshot_name, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = output_plugin, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = pg_16399_sync_16390_7506917068222656033
+  Column: value = 0/1964BC0
+  Column: value = 
+  Column: value = pgoutput
+
+← [1] 
+  Type: CommandComplete
+  Tag: CREATE_REPLICATION_SLOT
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: SELECT c.oid, c.relreplident, c.relkind  FROM pg_catalog.pg_class c  INNER JOIN pg_catalog.pg_namespace n        ON (c.relnamespace = n.oid) WHERE n.nspname = 'public'   AND c.relname = 'gen_data_2'
+
+← [1] 
+  Type: RowDescription
+  Field: name = oid, oid = 1259, attnum = 1, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = relreplident, oid = 1259, attnum = 26, typeoid = 18, typelen = 1, typmod = -1, format = 0
+  Field: name = relkind, oid = 1259, attnum = 17, typeoid = 18, typelen = 1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 16392
+  Column: value = d
+  Column: value = r
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: SELECT DISTINCT  (CASE WHEN (array_length(gpt.attrs, 1) = c.relnatts)   THEN NULL ELSE gpt.attrs END)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt,  pg_class c WHERE gpt.relid = 16392 AND c.oid = gpt.relid   AND p.pubname IN ( 'pub_publication' )
+
+← [1] 
+  Type: RowDescription
+  Field: name = attrs, oid = 0, attnum = 0, typeoid = 22, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: SELECT a.attnum,       a.attname,       a.atttypid,       a.attnum = ANY(i.indkey)  FROM pg_catalog.pg_attribute a  LEFT JOIN pg_catalog.pg_index i       ON (i.indexrelid = pg_get_replica_identity_index(16392)) WHERE a.attnum > 0::pg_catalog.int2   AND NOT a.attisdropped AND a.attgenerated = ''   AND a.attrelid = 16392 ORDER BY a.attnum
+
+← [1] 
+  Type: RowDescription
+  Field: name = attnum, oid = 1249, attnum = 5, typeoid = 21, typelen = 2, typmod = -1, format = 0
+  Field: name = attname, oid = 1249, attnum = 2, typeoid = 19, typelen = 64, typmod = -1, format = 0
+  Field: name = atttypid, oid = 1249, attnum = 3, typeoid = 26, typelen = 4, typmod = -1, format = 0
+  Field: name = ?column?, oid = 0, attnum = 0, typeoid = 16, typelen = 1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 1
+  Column: value = id
+  Column: value = 23
+  Column: value = t
+
+← [1] 
+  Type: DataRow
+  Column: value = 2
+  Column: value = name
+  Column: value = 1043
+  Column: value = f
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 2
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: SELECT DISTINCT pg_get_expr(gpt.qual, gpt.relid)  FROM pg_publication p,  LATERAL pg_get_publication_tables(p.pubname) gpt WHERE gpt.relid = 16392   AND p.pubname IN ( 'pub_publication' )
+
+← [1] 
+  Type: RowDescription
+  Field: name = pg_get_expr, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [1] 
+  Type: DataRow
+  Column: value = 
+
+← [1] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: COPY public.gen_data_2 (id, name) TO STDOUT
+
+← [1] 
+  Type: CopyOutResponse
+  Format: text
+  Column Format: unknown
+  Column Format: text
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [49, 9, 100, 97, 116, 97, 95, 49, 49, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [50, 9, 100, 97, 116, 97, 95, 49, 50, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [51, 9, 100, 97, 116, 97, 95, 49, 51, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [52, 9, 100, 97, 116, 97, 95, 49, 52, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [53, 9, 100, 97, 116, 97, 95, 49, 53, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [54, 9, 100, 97, 116, 97, 95, 49, 54, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [55, 9, 100, 97, 116, 97, 95, 49, 55, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [56, 9, 100, 97, 116, 97, 95, 49, 56, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 1
+  RawData: [57, 9, 100, 97, 116, 97, 95, 49, 57, 10]
+
+← [1] 
+  Type: CopyData
+  Tag: 2
+  RawData: [48, 9, 100, 97, 116, 97, 95, 50, 48, 10]
+
+← [1] 
+  Type: CopyDone
+
+← [1] 
+  Type: CommandComplete
+  Tag: COPY 10
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: In transaction block
+
+→ [1] 
+  Type: Query
+  Query: COMMIT
+
+← [1] 
+  Type: CommandComplete
+  Tag: COMMIT
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [1] 
+  Type: Query
+  Query: START_REPLICATION SLOT "pg_16399_sync_16390_7506917068222656033" LOGICAL 0/1964BC0 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [1] 
+  Type: CopyBothResponse
+  Format: text
+
+← [1] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964BC0, timestamp = 801155590598323, reply_asap = 0
+
+← [1] 
+  Type: CopyDone
+
+← [1] 
+  Type: CommandComplete
+  Tag: COPY 0
+
+← [1] 
+  Type: CommandComplete
+  Tag: START_REPLICATION
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+← [1] 
+  Type: CommandComplete
+  Tag: DROP_REPLICATION_SLOT
+
+← [1] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+× [1] Client closed the connection
+× [1] Closing connection to upstream
+→ [1] copied total 1883 bytes in this session
+← [1] copied total 1618 bytes in this session
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1964BC0, timestamp = 801155620627693, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1973880, timestamp = 801155633435442, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19738B8, timestamp = 801155633446080, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/197E1C8, timestamp = 801155633448927, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/198A1B0, timestamp = 801155633454806, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19905C8, timestamp = 801155633459401, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19939E0, timestamp = 801155633460153, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/1997670, timestamp = 801155633466079, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/199F168, timestamp = 801155633468909, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19A1C28, timestamp = 801155633469477, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19A2AC0, timestamp = 801155633470042, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19A9CA8, timestamp = 801155633472846, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19ACB38, timestamp = 801155633474306, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19ACB70, timestamp = 801155648514948, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19ACB70, timestamp = 801155678545815, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B0140, timestamp = 801155693428131, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2530, timestamp = 801155693629737, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155699859917, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155729890122, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155759917256, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155789946079, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155819975282, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155850002842, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155880030432, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2568, timestamp = 801155910058841, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2618, timestamp = 801155933745732, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801155934548682, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801155964577502, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801155994605318, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156024633646, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156054661640, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156084687332, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156114717007, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156144746918, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156174776158, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156204805514, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156234837229, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156264868156, reply_asap = 0
+
+← [0] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156294896538, reply_asap = 0
+
+× [0] Client closed the connection
+× [0] Closing connection to upstream
+→ [0] copied total 3933 bytes in this session
+← [0] copied total 1957 bytes in this session
+→ [2] Received a client connection from [::1]:62398
+→ [2] 
+  Type: SSLRequest
+
+← [2] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [2] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [2] 
+  Type: AuthenticationOk
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [2] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [2] 
+  Type: BackendKeyData
+  ProcessId: 94167
+  SecretKey: -144436701
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [2] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 
+
+← [2] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [2] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [2] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [2] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [2] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [2] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [2] 
+  Type: CopyBothResponse
+  Format: text
+
+← [2] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156595622428, reply_asap = 0
+
+← [2] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801156595622748, reply_asap = 0
+
+× [2] Client closed the connection
+× [2] Closing connection to upstream
+→ [2] copied total 507 bytes in this session
+← [2] copied total 768 bytes in this session
+→ [3] Received a client connection from [::1]:62425
+→ [3] 
+  Type: SSLRequest
+
+← [3] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [3] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [3] 
+  Type: AuthenticationOk
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [3] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [3] 
+  Type: BackendKeyData
+  ProcessId: 94190
+  SecretKey: -1132162506
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [3] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [3] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 
+
+← [3] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [3] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [3] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [3] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [3] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [3] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [3] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [3] 
+  Type: CopyBothResponse
+  Format: text
+
+← [3] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157054042621, reply_asap = 0
+
+← [3] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157054043775, reply_asap = 0
+
+× [3] Client closed the connection
+× [3] Closing connection to upstream
+→ [3] copied total 507 bytes in this session
+← [3] copied total 768 bytes in this session
+→ [4] Received a client connection from [::1]:62447
+→ [4] 
+  Type: SSLRequest
+
+← [4] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [4] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [4] 
+  Type: AuthenticationOk
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [4] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [4] 
+  Type: BackendKeyData
+  ProcessId: 94194
+  SecretKey: 1367283880
+
+← [4] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [4] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [4] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [4] 
+  Type: DataRow
+  Column: value = 
+
+← [4] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [4] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [4] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [4] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [4] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [4] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [4] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [4] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [4] 
+  Type: CopyBothResponse
+  Format: text
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157375538661, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157375539985, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157405569094, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157435596799, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157465623076, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157495649280, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157525678925, reply_asap = 0
+
+← [4] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157555705555, reply_asap = 0
+
+× [4] Client closed the connection
+× [4] Closing connection to upstream
+→ [4] copied total 1248 bytes in this session
+← [4] copied total 906 bytes in this session
+→ [5] Received a client connection from [::1]:62845
+→ [5] 
+  Type: SSLRequest
+
+← [5] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [5] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [5] 
+  Type: AuthenticationOk
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [5] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [5] 
+  Type: BackendKeyData
+  ProcessId: 94261
+  SecretKey: 478221884
+
+← [5] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [5] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [5] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [5] 
+  Type: DataRow
+  Column: value = 
+
+← [5] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [5] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [5] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [5] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [5] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [5] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [5] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [5] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [5] 
+  Type: CopyBothResponse
+  Format: text
+
+← [5] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157874659821, reply_asap = 0
+
+← [5] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801157874660243, reply_asap = 0
+
+× [5] Client closed the connection
+× [5] Closing connection to upstream
+→ [5] copied total 507 bytes in this session
+← [5] copied total 768 bytes in this session
+→ [6] Received a client connection from [::1]:62866
+→ [6] 
+  Type: SSLRequest
+
+← [6] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [6] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [6] 
+  Type: AuthenticationOk
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [6] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [6] 
+  Type: BackendKeyData
+  ProcessId: 94264
+  SecretKey: 1996781961
+
+← [6] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [6] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [6] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [6] 
+  Type: DataRow
+  Column: value = 
+
+← [6] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [6] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [6] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [6] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [6] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [6] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [6] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [6] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [6] 
+  Type: CopyBothResponse
+  Format: text
+
+← [6] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801158243739304, reply_asap = 0
+
+← [6] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801158243739647, reply_asap = 0
+
+× [6] Client closed the connection
+× [6] Closing connection to upstream
+→ [6] copied total 507 bytes in this session
+← [6] copied total 768 bytes in this session
+→ [7] Received a client connection from [::1]:62893
+→ [7] 
+  Type: SSLRequest
+
+← [7] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [7] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [7] 
+  Type: AuthenticationOk
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [7] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [7] 
+  Type: BackendKeyData
+  ProcessId: 94270
+  SecretKey: -1238389979
+
+← [7] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [7] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [7] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [7] 
+  Type: DataRow
+  Column: value = 
+
+← [7] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [7] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [7] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [7] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [7] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [7] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [7] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [7] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [7] 
+  Type: CopyBothResponse
+  Format: text
+
+← [7] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801158635367859, reply_asap = 0
+
+← [7] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801158635368156, reply_asap = 0
+
+× [7] Client closed the connection
+× [7] Closing connection to upstream
+→ [7] copied total 507 bytes in this session
+← [7] copied total 768 bytes in this session
+→ [8] Received a client connection from [::1]:62951
+→ [8] 
+  Type: SSLRequest
+
+← [8] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [8] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [8] 
+  Type: AuthenticationOk
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [8] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [8] 
+  Type: BackendKeyData
+  ProcessId: 94291
+  SecretKey: 696846479
+
+← [8] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [8] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [8] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [8] 
+  Type: DataRow
+  Column: value = 
+
+← [8] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [8] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [8] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [8] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [8] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [8] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [8] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [8] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [8] 
+  Type: CopyBothResponse
+  Format: text
+
+← [8] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159021550294, reply_asap = 0
+
+← [8] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159021550824, reply_asap = 0
+
+× [8] Client closed the connection
+× [8] Closing connection to upstream
+→ [8] copied total 507 bytes in this session
+← [8] copied total 768 bytes in this session
+→ [9] Received a client connection from [::1]:62982
+→ [9] 
+  Type: SSLRequest
+
+← [9] 
+  Type: SSLResponse
+  Accepted: false
+
+→ [9] 
+  Type: StartupMessage
+  Protocol Version: 3.0
+  Parameter: user = raminder.singh
+  Parameter: database = pub_db
+  Parameter: replication = database
+  Parameter: options = -c datestyle=ISO -c intervalstyle=postgres -c extra_float_digits=3
+  Parameter: application_name = sub_subscription
+  Parameter: client_encoding = UTF8
+
+← [9] 
+  Type: AuthenticationOk
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: in_hot_standby = off
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: integer_datetimes = on
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: TimeZone = Asia/Kolkata
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: IntervalStyle = postgres
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: is_superuser = on
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: application_name = sub_subscription
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: default_transaction_read_only = off
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: scram_iterations = 4096
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: DateStyle = ISO, DMY
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: standard_conforming_strings = on
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: session_authorization = raminder.singh
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: client_encoding = UTF8
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: server_version = 16.8 (Homebrew)
+
+← [9] 
+  Type: ParameterStatus
+  Parameter: server_encoding = UTF8
+
+← [9] 
+  Type: BackendKeyData
+  ProcessId: 94298
+  SecretKey: 1542266387
+
+← [9] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [9] 
+  Type: Query
+  Query: SELECT pg_catalog.set_config('search_path', '', false);
+
+← [9] 
+  Type: RowDescription
+  Field: name = set_config, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [9] 
+  Type: DataRow
+  Column: value = 
+
+← [9] 
+  Type: CommandComplete
+  Tag: SELECT 1
+
+← [9] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [9] 
+  Type: Query
+  Query: IDENTIFY_SYSTEM
+
+← [9] 
+  Type: RowDescription
+  Field: name = systemid, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = timeline, oid = 0, attnum = 0, typeoid = 20, typelen = 8, typmod = -1, format = 0
+  Field: name = xlogpos, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+  Field: name = dbname, oid = 0, attnum = 0, typeoid = 25, typelen = -1, typmod = -1, format = 0
+
+← [9] 
+  Type: DataRow
+  Column: value = 7506917066090602007
+  Column: value = 1
+  Column: value = 0/19B2650
+  Column: value = pub_db
+
+← [9] 
+  Type: CommandComplete
+  Tag: IDENTIFY_SYSTEM
+
+← [9] 
+  Type: ReadyForQuery
+  TransactionStatus: Idle
+
+→ [9] 
+  Type: Query
+  Query: START_REPLICATION SLOT "sub_subscription" LOGICAL 0/1964B50 (proto_version '4', origin 'any', publication_names '"pub_publication"')
+
+← [9] 
+  Type: CopyBothResponse
+  Format: text
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159441386880, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159441387277, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159471416335, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159501444673, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159531470113, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159561500368, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159591529769, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159621558592, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159651586334, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159681611878, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159711638507, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159741665920, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159771694615, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159801724637, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159831750094, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159861777066, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159891807197, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159921837988, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159951869161, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801159981897445, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160011926766, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160041952802, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160071978011, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160102007599, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160132035286, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160162062794, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160192090597, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160222120707, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160252150732, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160282180823, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160312208391, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160342235111, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160372263599, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160402293475, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160432323689, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160462349533, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160492377887, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160522404442, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160552433364, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160582463424, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160612491926, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160642520097, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160672552689, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160702580049, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160732609414, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160762639074, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160792667864, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160822697492, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160852727583, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160882755681, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160912783585, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160942811300, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801160972837805, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161002865474, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161032891951, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161062920025, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161092948364, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161122974766, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161153004602, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161183032076, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161213059764, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161243090934, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161273118037, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161303145889, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161333174706, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161363205809, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161393235001, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161423259034, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161453287545, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161483314029, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161513343179, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161543369220, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161573399396, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161603429085, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161633459265, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161663487838, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161693515821, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161723543847, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161753573311, reply_asap = 0
+
+← [9] 
+  Type: CopyData
+  PrimaryKeepalive: end = 0/19B2650, timestamp = 801161783601811, reply_asap = 0
+
