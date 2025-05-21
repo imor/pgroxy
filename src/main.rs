@@ -1,6 +1,6 @@
 mod decoder;
 
-use std::sync::atomic::AtomicU8;
+use std::sync::atomic::AtomicU16;
 
 use bytes::BytesMut;
 use clap::Parser;
@@ -24,7 +24,7 @@ struct ClientToUpstreamSession {
     buf: BytesMut,
     decoder: ClientMessageDecoder,
     total_bytes_copied: u64,
-    session_id: u8,
+    session_id: u16,
 }
 
 impl HalfSession for ClientToUpstreamSession {
@@ -59,7 +59,7 @@ struct UpstreamToClientSession {
     buf: BytesMut,
     decoder: ServerMessageDecoder,
     total_bytes_copied: u64,
-    session_id: u8,
+    session_id: u16,
 }
 
 impl HalfSession for UpstreamToClientSession {
@@ -100,7 +100,7 @@ impl HalfSession for UpstreamToClientSession {
     }
 }
 
-static LAST_SESSION_ID: AtomicU8 = AtomicU8::new(0);
+static LAST_SESSION_ID: AtomicU16 = AtomicU16::new(0);
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
