@@ -914,26 +914,36 @@ impl Display for DataRowBodyFormatter<'_> {
         if let Some(row_desc) = self.row_description_body {
             debug_assert!(self.data_row_body.columns.len() == row_desc.fields.len());
             for (i, column) in self.data_row_body.columns.iter().enumerate() {
+                let is_null = column.is_null;
                 let field = &row_desc.fields[i];
                 if field.format == 0 {
                     // text
                     if let Ok(value) = std::str::from_utf8(&column.value) {
-                        writeln!(f, "  Column: value = {value}")?;
-                        writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
+                        writeln!(f, "  Column: value = {value}, is_null = {is_null}")?;
                     } else {
-                        writeln!(f, "  Column: value = {:?}", column.value)?;
-                        writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
+                        writeln!(
+                            f,
+                            "  Column: value = {:?}, is_null = {is_null}",
+                            column.value
+                        )?;
                     }
                 } else {
                     // binary or unknown
-                    writeln!(f, "  Column: value = {:?}", column.value)?;
-                    writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
+                    writeln!(
+                        f,
+                        "  Column: value = {:?}, is_null = {is_null}",
+                        column.value
+                    )?;
                 }
             }
         } else {
             for column in &self.data_row_body.columns {
-                writeln!(f, "  Column: value = {:?}", column.value)?;
-                writeln!(f, "  Column: is_null = {:?}", column.is_null)?;
+                let is_null = column.is_null;
+                writeln!(
+                    f,
+                    "  Column: value = {:?}, is_null = {is_null}",
+                    column.value
+                )?;
             }
         }
         Ok(())
